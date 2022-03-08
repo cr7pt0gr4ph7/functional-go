@@ -2,7 +2,7 @@ package option
 
 type Optional[T any] struct {
 	value    T
-  hasValue bool
+	hasValue bool
 }
 
 func Some[T any](value T) Optional[T] {
