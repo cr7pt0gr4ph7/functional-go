@@ -1,5 +1,13 @@
 package eval
 
+type Eval[A any] struct {
+	value A
+}
+
+func (e Eval[A]) Value() A {
+	return e.value
+}
+
 func Defer[A any](deferred func() Eval[A]) Eval[A] {
 	return deferred()
 }
