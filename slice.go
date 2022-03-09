@@ -15,7 +15,7 @@ func (s Slice[A]) FoldLeft(fn FoldLeftFn[A]) {
 func sliceFoldLeft[A any, B any](s Slice[A], initial B, foldFn func(elem A, state B) B) B {
 	acc := initial
 	for _, elem := range s {
-		acc = foldFn(s, acc)
+		acc = foldFn(elem, acc)
 	}
 	return acc
 }
