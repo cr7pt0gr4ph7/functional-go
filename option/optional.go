@@ -13,11 +13,11 @@ func None[T any]() Optional[T] {
 	return Optional[T]{hasValue: false}
 }
 
-func (o Optional[T]) Get() (value T, ok bool) {
+func (o Optional[T]) Value() (value T, ok bool) {
 	return o.value, o.hasValue
 }
 
-func (o Optional[T]) GetOrDefault() T {
+func (o Optional[T]) ValueOrDefault() T {
 	if o.hasValue {
 		return o.value
 	} else {
@@ -26,7 +26,7 @@ func (o Optional[T]) GetOrDefault() T {
 	}
 }
 
-func (o Optional[T]) GetOrFallback(fallback T) T {
+func (o Optional[T]) ValueOrElse(fallback T) T {
 	if o.hasValue {
 		return o.value
 	} else {
