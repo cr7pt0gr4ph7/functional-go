@@ -1,6 +1,7 @@
 package eval
 
 type Eval[A any] struct {
+	impl  evalImpl[A]
 	value A
 }
 
