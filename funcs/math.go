@@ -8,9 +8,9 @@ type Numeric interface {
 	constraints.Complex | constraints.Integer | constraints.Float
 }
 
-func Plus[A Numeric | ~string](add A) func(in A) A {
+func Plus[A Numeric | ~string](summand A) func(in A) A {
 	return func(in A) A {
-		return in + add
+		return in + summand
 	}
 }
 
