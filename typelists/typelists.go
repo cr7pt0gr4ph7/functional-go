@@ -2,10 +2,19 @@
 package typelists
 
 // TypeList can be used as a constraint for type-level lists.
-type TypeList interface{ typeList() }
+type TypeList interface{
+ 	typeList() /// marker method
+}
+
+// NonEmpty can be used as a constraint for non-empty type-level lists.
+type NonEmpty interface {
+	TypeList
+	nonEmpty() // marker method
+}
 
 func (_ Nil) typeList()        {}
 func (_ Cons[_, _]) typeList() {}
+func (_ Cons[_, _]) nonEmpty() {}
 
 // Nil represents the empty list.
 type Nil struct{}
