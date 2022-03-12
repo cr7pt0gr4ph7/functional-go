@@ -31,3 +31,15 @@ func Nop() Subscription {
 func (_ NopSubscription) Cancel() {
 	// Do nothing, as the name Nop implies.
 }
+
+type State struct {
+	cancelled bool
+}
+
+func (s *State) Cancel() {
+	s.cancelled = true
+}
+
+func (s *State) IsCancelled() bool {
+	return s.cancelled
+}
