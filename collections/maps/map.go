@@ -69,6 +69,12 @@ func (m Map[K, V]) Remove(entry Entry[K, V]) bool {
 	return existed
 }
 
+func (m Map[K, V]) Clear() {
+	for k := range m {
+		delete(m, k)
+	}
+}
+
 func (m Map[K, V]) InsertAt(key K, value V) {
 	if !m.DefinedAt(key) {
 		m[key] = value
