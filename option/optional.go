@@ -75,10 +75,6 @@ func (o Optional[_]) IsEmpty() bool {
 	return !o.hasValue
 }
 
-func (o Optional[_]) IsPresent() bool {
-	return o.hasValue
-}
-
 // Function variant of `o.IsPresent()`.
 // Useful as a predicate function.
 func IsPresent[T any](o Optional[T]) bool {
@@ -123,7 +119,7 @@ func Flatten[T any](o Optional[Optional[T]]) Optional[T] {
 	}
 }
 
-func FilterBy[T any](o Optional[T], predicate func(value T) bool) Optional[T] {
+func Filter[T any](o Optional[T], predicate func(value T) bool) Optional[T] {
 	if v, ok := o.Value(); ok && predicate(v) {
 		return o
 	} else {
