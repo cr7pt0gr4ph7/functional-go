@@ -9,6 +9,10 @@ type Keyed[K any, V any] interface {
 	Clear()
 }
 
+type Builder[T any] interface {
+	Add(elem T) bool
+}
+
 type Unordered[T any] interface {
 	Add(elem T) bool
 	Remove(elem T) bool
