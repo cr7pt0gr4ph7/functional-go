@@ -6,6 +6,29 @@ func (l *ArrayList[T]) At(index int) T {
 	return (*l)[index]
 }
 
+func (l *ArrayList[T]) TryAt(index int) (T, bool) {
+	if l.DefinedAt(index) {
+		return l.At(index), true
+	}
+	var defaultT T
+	return defaultT, false
+}
+
+func (l *ArrayList[T]) AtOrDefault(index int) T {
+	if l.DefinedAt(index) {
+		return l.At(index)
+	}
+	var defaultT T
+	return defaultT
+}
+
+func (l *ArrayList[T]) AtOrElse(index int, fallback T) T {
+	if l.DefinedAt(index) {
+		return l.At(index)
+	}
+	return fallback
+}
+
 func (l *ArrayList[_]) DefinedAt(index int) bool {
 	return index >= 0 && index < len(*l)
 }
