@@ -18,8 +18,9 @@ func (l *ArrayList[_]) Len() int {
 	return len(*l)
 }
 
-func (l *ArrayList[T]) Add(elem T) {
+func (l *ArrayList[T]) Add(elem T) bool {
 	*l = append(*l, elem)
+	return true
 }
 
 func (l *ArrayList[T]) Clear() {
