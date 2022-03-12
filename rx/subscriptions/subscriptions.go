@@ -5,6 +5,21 @@ type Subscription interface {
 	Cancel()
 }
 
+type CancelFunc func()
+
+type Anonymous CancelFunc
+
+func New(onCancel CancelFunc) Subscription {
+	return Anonymous(onCancel)
+}
+
+func (s Anonymous) Cancel() {
+	// TODO(lw) Handle double cancellation by invoking s only once
+	if s != nil {
+		s()
+	}
+}
+
 type NopSubscription struct{}
 
 var nopInstance Subscription = NopSubscription{}
@@ -14,5 +29,5 @@ func Nop() Subscription {
 }
 
 func (_ NopSubscription) Cancel() {
-	// Do nothing, as the name NopSubscription implies.
+	// Do nothing, as the name Nop implies.
 }
