@@ -52,3 +52,34 @@ func (r Result[T]) ValueOrPanic() T {
 func (r Result[_]) Error() error {
 	return r.err
 }
+
+func (r Result[T]) ErrorOrPanic() error {
+	if r.err == nil {
+		panic("not an error")
+	}
+	return r.err
+}
+
+func Map[A any, B any](r Result[A], mapValue func(value A) B) Result[B] {
+	if v, e := r.Extract(); e == nil {
+		return Ok(mapValue(v))
+	} else {
+		return Error[B](e)
+	}
+}
+
+func MapError[A any](r Result[A], mapError func(err error) error) Result[A] {
+	if _, e := r.Extract(); e == nil {
+		return r
+	} else {
+		return Error[A](mapError(e))
+	}
+}
+
+func FlatMap[A any, B any](r Result[A], mapValue func(value A) Result[B]) Result[B] {
+	if v, e := r.Extract(); e == nil {
+		return mapValue(v)
+	} else {
+		return Error[B](e)
+	}
+}
