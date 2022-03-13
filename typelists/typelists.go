@@ -3,7 +3,7 @@ package typelists
 
 // A type whose existence only matters for type-level operations,
 // and whose value-level representation is simply empty.
-type phantomType = struct{]
+type phantomType = struct{}
 
 // TypeList can be used as a constraint for type-level lists.
 type TypeList interface{
