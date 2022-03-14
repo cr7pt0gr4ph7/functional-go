@@ -26,11 +26,24 @@ type Pure[E any, T any] struct {
 	value T
 }
 
+func newPure[E any, T any](value T) Eff[E, T] {
+	return asEff[E, T](Pure[E, T]{value: value})
+}
+
+type Start any
+
 type Union[E any, T any] struct{}
 
 type Cont[E any, A any, B any] struct {
 	effects Union[E, A]
 	queue   evalQueue[E, A, B]
+}
+
+func newCont[E any, A any, B any](effects Union[E, A], queue evalQueue[E, A, B]) Eff[E, B] {
+	return asEff[E, B](Cont[E, A, B]{
+		effects: effects,
+		queue:   queue,
+	})
 }
 
 func Lift[E any, A any, B any](f func(arg A) B) func(arg Eff[E, A]) Eff[E, B] {
@@ -40,15 +53,32 @@ func Lift[E any, A any, B any](f func(arg A) B) func(arg Eff[E, A]) Eff[E, B] {
 }
 
 func Return[E any, T any](value T) Eff[E, T] {
-	return asEff[E, T](Pure[E, T]{value: value})
+	return newPure[E](value)
 }
 
 func Map[E any, A any, B any](arg Eff[E, A], f func(arg A) B) Eff[E, B] {
-	return Return[E](f(arg.EffImpl.(Pure[E, A]).value))
+	switch m := arg.EffImpl.(type) {
+	case Pure[E, A]:
+		return newPure[E](f(m.value))
+	case Cont[E, Start, A]: // hack for missing universal quantification
+		g := func(arg A) Eff[E, B] {
+			return newPure[E](f(arg))
+		}
+		return newCont(m.effects, concatQ(m.queue, liftQ(g)))
+	default:
+		panic("unreachable")
+	}
 }
 
 func FlatMap[E any, A any, B any](arg Eff[E, A], f func(arg A) Eff[E, B]) Eff[E, B] {
-	return f(arg.EffImpl.(Pure[E, A]).value)
+	switch m := arg.EffImpl.(type) {
+	case Pure[E, A]:
+		return f(m.value)
+	case Cont[E, Start, A]: // hack for missing universal quantification
+		return newCont(m.effects, concatQ(m.queue, liftQ(f)))
+	default:
+		panic("unreachable")
+	}
 }
 
 // Appends the effects from `others`, but keeps the value from `first`.
