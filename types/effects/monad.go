@@ -12,32 +12,43 @@ type EffImpl[E any, T any] interface {
 	eff(eff E) T // marker method - do not call
 }
 
+// Marker type used for better compiler errors.
+type effIsNotAnEffImpl struct{}
+
+// Force different signature to prevent Eff from being used as an EffImpl,
+// even though it embeds an EffImpl.
+func (_ Eff[E, T]) eff(_ effIsNotAnEffImpl) {}
+
 func (_ Pure[E, T]) eff(eff E) T    { panic("marker method") }
 func (_ Cont[E, _, T]) eff(eff E) T { panic("marker method") }
 
 type Pure[E any, T any] struct {
-	Value T
+	value T
 }
 
+type Union[E any, T any] struct{}
+
 type Cont[E any, A any, B any] struct {
+	effects Union[E, A]
+	queue   evalQueue[E, A, B]
 }
 
 func Lift[E any, A any, B any](f func(arg A) B) func(arg Eff[E, A]) Eff[E, B] {
 	return func(arg Eff[E, A]) Eff[E, B] {
-		return Return[E](f(arg.EffImpl.(Pure[E, A]).Value))
+		return Return[E](f(arg.EffImpl.(Pure[E, A]).value))
 	}
 }
 
 func Return[E any, T any](value T) Eff[E, T] {
-	return asEff[E, T](Pure[E, T]{Value: value})
+	return asEff[E, T](Pure[E, T]{value: value})
 }
 
 func Map[E any, A any, B any](arg Eff[E, A], f func(arg A) B) Eff[E, B] {
-	return Return[E](f(arg.EffImpl.(Pure[E, A]).Value))
+	return Return[E](f(arg.EffImpl.(Pure[E, A]).value))
 }
 
 func FlatMap[E any, A any, B any](arg Eff[E, A], f func(arg A) Eff[E, B]) Eff[E, B] {
-	return f(arg.EffImpl.(Pure[E, A]).Value)
+	return f(arg.EffImpl.(Pure[E, A]).value)
 }
 
 // Appends the effects from `others`, but keeps the value from `first`.
