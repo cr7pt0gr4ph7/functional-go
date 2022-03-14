@@ -17,10 +17,10 @@ type EffectTag interface {
 	effectTag()
 }
 
-func (_ AskEffect[E, R]) effectTag()  {}
-func (_ TellEffect[E, W]) effectTag() {}
-func (_ GetEffect[E, W]) effectTag()  {}
-func (_ SetEffect[E, W]) effectTag()  {}
+func (_ AskEffect[R]) effectTag()  {}
+func (_ TellEffect[W]) effectTag() {}
+func (_ GetEffect[S]) effectTag()  {}
+func (_ SetEffect[S]) effectTag()  {}
 
 // Effect: Read a shared immutable value from the environment.
 type Reader[E any, R any] interface {
@@ -36,10 +36,27 @@ func _[E Reader[E, R], R any]() {
 type ReaderI[E Reader[E, R], R any] struct{}
 
 func (_ ReaderI[E, R]) Ask() Eff[E, R] {
-	return injectEffect[E, R](AskEffect[E, R]{})
+	return injectEffect[E, R](AskEffect[R]{})
 }
 
-type AskEffect[E any, R any] struct{}
+type AskEffect[R any] struct{}
+
+func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
+	loop := func(e Eff[E, R]) Eff[E, R] {
+		return RunReader(value, e)
+	}
+
+	switch m := e.EffImpl.(type) {
+	case Cont[E, Start, R]:
+		switch t := m.effect.(type) {
+		case AskEffect[R]:
+			return RunReader(value, qApply(m.queue, Start(value)))
+		default:
+			return newCont(Union[E, Start](t), qCompose(m.queue, loop))
+		}
+	}
+	return e
+}
 
 // Effect: Send outputs to the effects environment.
 type Writer[E any, W any] interface {
@@ -55,10 +72,38 @@ func _[E Writer[E, W], W any]() {
 type WriterI[E Writer[E, W], W any] struct{}
 
 func (_ WriterI[E, W]) Tell(output W) Eff[E, Unit] {
-	return injectEffect[E, Unit](TellEffect[E, W]{output: output})
+	return injectEffect[E, Unit](TellEffect[W]{output: output})
 }
 
-type TellEffect[E any, W any] struct{ output W }
+type TellEffect[W any] struct{ output W }
+
+type WriterResult[T any, W any] struct {
+	Value   T
+	Written List[W]
+}
+
+func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+	switch m := e.EffImpl.(type) {
+	case Pure[E, T]:
+		return newPure[E](WriterResult[T, W]{
+			Value:   m.value,
+			Written: Nil[W]{},
+		})
+	case Cont[E, Start, T]:
+		k := qCompose(m.queue, RunWriter[W, E, T])
+		switch t := m.effect.(type) {
+		case TellEffect[W]:
+			return newPure[E](WriterResult[T, W]{
+			Value:   m.value,
+			Written: x.Written.Push(t.output),
+		})
+		default:
+			return newCont(Union[E, Start](t), k)
+		}
+	default:
+		panic("unreachable")
+	}
+}
 
 // Effect: Provides read/write access to a shared updatable state value of type S.
 type State[E any, S any] interface {
@@ -75,13 +120,13 @@ func _[E State[E, S], S any]() {
 type StateI[E State[E, S], S any] struct{}
 
 func (_ StateI[E, S]) Get() Eff[E, S] {
-	return injectEffect[E, S](GetEffect[E, S]{})
+	return injectEffect[E, S](GetEffect[S]{})
 }
 
 func (_ StateI[E, S]) Set(newState S) Eff[E, Unit] {
-	return injectEffect[E, Unit](SetEffect[E, S]{newState: newState})
+	return injectEffect[E, Unit](SetEffect[S]{newState: newState})
 }
 
-type GetEffect[E any, S any] struct{}
+type GetEffect[S any] struct{}
 
-type SetEffect[E any, S any] struct{ newState S }
+type SetEffect[S any] struct{ newState S }
