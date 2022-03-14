@@ -30,27 +30,36 @@ func newPure[E any, T any](value T) Eff[E, T] {
 	return asEff[E, T](Pure[E, T]{value: value})
 }
 
-type Start any
-
-type Union[E any, T any] struct {
-	tags []EffectTag
+func RunPure[E any, T any](e Eff[E, T]) (T, error) {
+	panic("not implemented")
 }
 
-func inj[E any, T any, L EffectTag](tag L) Union[E, T] {
-	return Union[E, T]{
-		tags: []EffectTag{tag},
+func RunPureOrFail[E any, T any](e Eff[E, T]) T {
+	switch m := e.EffImpl.(type) {
+	case Pure[E, T]:
+		return m.value
+	default:
+		panic("unhandled effect")
 	}
 }
 
-type Cont[E any, A any, B any] struct {
-	effects Union[E, A]
-	queue   evalQueue[E, A, B]
+type Start any
+
+type Union[E any, T any] EffectTag
+
+func inj[E any, T any, L EffectTag](tag L) Union[E, T] {
+	return Union[E, T](tag)
 }
 
-func newCont[E any, A any, B any](effects Union[E, A], queue evalQueue[E, A, B]) Eff[E, B] {
+type Cont[E any, A any, B any] struct {
+	effect Union[E, A]
+	queue  evalQueue[E, A, B]
+}
+
+func newCont[E any, A any, B any](effect Union[E, A], queue evalQueue[E, A, B]) Eff[E, B] {
 	return asEff[E, B](Cont[E, A, B]{
-		effects: effects,
-		queue:   queue,
+		effect: effect,
+		queue:  queue,
 	})
 }
 
@@ -80,7 +89,7 @@ func Map[E any, A any, B any](arg Eff[E, A], f func(arg A) B) Eff[E, B] {
 		g := func(arg A) Eff[E, B] {
 			return newPure[E](f(arg))
 		}
-		return newCont(m.effects, concatQ(m.queue, liftQ(g)))
+		return newCont(m.effect, concatQ(m.queue, liftQ(g)))
 	default:
 		panic("unreachable")
 	}
@@ -91,7 +100,7 @@ func FlatMap[E any, A any, B any](arg Eff[E, A], f func(arg A) Eff[E, B]) Eff[E,
 	case Pure[E, A]:
 		return f(m.value)
 	case Cont[E, Start, A]: // hack for missing universal quantification
-		return newCont(m.effects, concatQ(m.queue, liftQ(f)))
+		return newCont(m.effect, concatQ(m.queue, liftQ(f)))
 	default:
 		panic("unreachable")
 	}
