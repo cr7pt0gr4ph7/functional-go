@@ -17,9 +17,10 @@ type EffectTag interface {
 	effectTag()
 }
 
-func (_ ReaderE[E, R]) effectTag() {}
-func (_ WriterE[E, W]) effectTag() {}
-func (_ StateE[E, W]) effectTag()  {}
+func (_ AskEffect[E, R]) effectTag()  {}
+func (_ TellEffect[E, W]) effectTag() {}
+func (_ GetEffect[E, W]) effectTag()  {}
+func (_ SetEffect[E, W]) effectTag()  {}
 
 // Effect: Read a shared immutable value from the environment.
 type Reader[E any, R any] interface {
@@ -32,13 +33,13 @@ func _[E Reader[E, R], R any]() {
 	var _ Reader[E, R] = ReaderI[E, R]{}
 }
 
-type ReaderE[E any, R any] struct{}
-
 type ReaderI[E Reader[E, R], R any] struct{}
 
 func (_ ReaderI[E, R]) Ask() Eff[E, R] {
-	panic("not implemented")
+	return injectEffect[E, R](AskEffect[E, R]{})
 }
+
+type AskEffect[E any, R any] struct{}
 
 // Effect: Send outputs to the effects environment.
 type Writer[E any, W any] interface {
@@ -51,13 +52,13 @@ func _[E Writer[E, W], W any]() {
 	var _ Writer[E, W] = WriterI[E, W]{}
 }
 
-type WriterE[E any, W any] struct{}
-
 type WriterI[E Writer[E, W], W any] struct{}
 
 func (_ WriterI[E, W]) Tell(output W) Eff[E, Unit] {
-	panic("not implemented")
+	return injectEffect[E, Unit](TellEffect[E, W]{output: output})
 }
+
+type TellEffect[E any, W any] struct{ output W }
 
 // Effect: Provides read/write access to a shared updatable state value of type S.
 type State[E any, S any] interface {
@@ -71,14 +72,16 @@ func _[E State[E, S], S any]() {
 	var _ State[E, S] = StateI[E, S]{}
 }
 
-type StateE[E any, S any] struct{}
-
 type StateI[E State[E, S], S any] struct{}
 
 func (_ StateI[E, S]) Get() Eff[E, S] {
-	panic("not implemented")
+	return injectEffect[E, S](GetEffect[E, S]{})
 }
 
 func (_ StateI[E, S]) Set(newState S) Eff[E, Unit] {
-	panic("not implemented")
+	return injectEffect[E, Unit](SetEffect[E, S]{newState: newState})
 }
+
+type GetEffect[E any, S any] struct{}
+
+type SetEffect[E any, S any] struct{ newState S }
