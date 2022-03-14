@@ -32,7 +32,15 @@ func newPure[E any, T any](value T) Eff[E, T] {
 
 type Start any
 
-type Union[E any, T any] struct{}
+type Union[E any, T any] struct {
+	tags []EffectTag
+}
+
+func inj[E any, T any, L EffectTag](tag L) Union[E, T] {
+	return Union[E, T]{
+		tags: []EffectTag{tag},
+	}
+}
 
 type Cont[E any, A any, B any] struct {
 	effects Union[E, A]
@@ -44,6 +52,14 @@ func newCont[E any, A any, B any](effects Union[E, A], queue evalQueue[E, A, B])
 		effects: effects,
 		queue:   queue,
 	})
+}
+
+func injectEffect[E any, T any, L EffectTag](tag L) Eff[E, T] {
+	// We use Start/any as a workaround for not having universal quantification
+	return newCont[E, Start, T](
+		inj[E, Start](tag),
+		liftQ(func(value Start) Eff[E, T] { return newPure[E](value.(T)) }),
+	)
 }
 
 func Lift[E any, A any, B any](f func(arg A) B) func(arg Eff[E, A]) Eff[E, B] {
