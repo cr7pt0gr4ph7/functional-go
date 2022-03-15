@@ -11,21 +11,21 @@ type effImplBase interface {
 	isPure() bool
 	pureValue() any
 	getEffect() EffectTag
-	getQueue() evalQBase
+	getQueue() evalTreeNode
 }
 
-func (_ Eff[_, _]) effBase()                 {}
-func (e Eff[_, _]) impl() effImplBase        { return e.EffImpl }
-func (_ Pure[_, _]) effImplBase()            {}
-func (_ Cont[_, _, _]) effImplBase()         {}
-func (_ Pure[_, _]) isPure() bool            { return true }
-func (_ Cont[_, _, _]) isPure() bool         { return false }
-func (p Pure[_, _]) pureValue() any          { return p.value }
-func (_ Cont[_, _, _]) pureValue() any       { panic("not pure") }
-func (_ Pure[_, _]) getEffect() EffectTag    { panic("pure") }
-func (c Cont[_, _, _]) getEffect() EffectTag { return EffectTag(c.effect) }
-func (_ Pure[_, _]) getQueue() evalQBase     { panic("pure") }
-func (c Cont[_, _, _]) getQueue() evalQBase  { return evalQBase(c.queue) }
+func (_ Eff[_, _]) effBase()                   {}
+func (e Eff[_, _]) impl() effImplBase          { return e.EffImpl }
+func (_ Pure[_, _]) effImplBase()              {}
+func (_ Cont[_, _, _]) effImplBase()           {}
+func (_ Pure[_, _]) isPure() bool              { return true }
+func (_ Cont[_, _, _]) isPure() bool           { return false }
+func (p Pure[_, _]) pureValue() any            { return p.value }
+func (_ Cont[_, _, _]) pureValue() any         { panic("not pure") }
+func (_ Pure[_, _]) getEffect() EffectTag      { panic("pure") }
+func (c Cont[_, _, _]) getEffect() EffectTag   { return EffectTag(c.effect) }
+func (_ Pure[_, _]) getQueue() evalTreeNode    { panic("pure") }
+func (c Cont[_, _, _]) getQueue() evalTreeNode { return evalTreeNode(c.queue) }
 
 // Generic type.
 type Eff[E any, T any] struct {
