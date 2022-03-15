@@ -1,5 +1,33 @@
 package effects
 
+// Non-generic workaround.
+type effBase interface {
+	effBase()
+	impl() effImplBase
+}
+
+type effImplBase interface {
+	effImplBase()
+	isPure() bool
+	pureValue() any
+	getEffect() EffectTag
+	getQueue() evalQBase
+}
+
+func (_ Eff[_, _]) effBase()                 {}
+func (e Eff[_, _]) impl() effImplBase        { return e.EffImpl }
+func (_ Pure[_, _]) effImplBase()            {}
+func (_ Cont[_, _, _]) effImplBase()         {}
+func (_ Pure[_, _]) isPure() bool            { return true }
+func (_ Cont[_, _, _]) isPure() bool         { return false }
+func (p Pure[_, _]) pureValue() any          { return p.value }
+func (_ Cont[_, _, _]) pureValue() any       { panic("not pure") }
+func (_ Pure[_, _]) getEffect() EffectTag    { panic("pure") }
+func (c Cont[_, _, _]) getEffect() EffectTag { return EffectTag(c.effect) }
+func (_ Pure[_, _]) getQueue() evalQBase     { panic("pure") }
+func (c Cont[_, _, _]) getQueue() evalQBase  { return evalQBase(c.queue) }
+
+// Generic type.
 type Eff[E any, T any] struct {
 	EffImpl[E, T]
 }
@@ -10,6 +38,7 @@ func asEff[E any, T any](impl EffImpl[E, T]) Eff[E, T] {
 
 type EffImpl[E any, T any] interface {
 	eff(eff E) T // marker method - do not call
+	effImplBase
 }
 
 // Marker type used for better compiler errors.
