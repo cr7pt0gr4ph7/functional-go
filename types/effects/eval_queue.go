@@ -86,10 +86,6 @@ func concatQ2Out[E any, B any](a2x evalTreeNode, x2b evalRightNode[E, B]) evalRi
 	return nodeQ2[E, B]{left: a2x, right: x2b}
 }
 
-func qApply[E any, A any, B any](start A, q evalQueue[E, A, B]) Eff[E, B] {
-	return q.qApply(start)
-}
-
 func (l leafQ[E, A, B]) qApply(start any) Eff[E, B] {
 	return l.lifted(start.(A))
 }
