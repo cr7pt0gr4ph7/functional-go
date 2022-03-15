@@ -54,7 +54,7 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	case Cont[E, Start, R]:
 		switch t := m.effect.(type) {
 		case AskEffect[R]:
-			return RunReader(value, qApply(m.queue, Start(value)))
+			return RunReader(value, qApply(Start(value), m.queue))
 		default:
 			return newCont(Union[E, Start](t), liftQ(qCompose(m.queue, loop)))
 		}
