@@ -110,7 +110,7 @@ func (t nodeQ[E, A, X, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.
 	}
 }
 
-func (t nodeQ2[E, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
+func (t nodeQErased[E, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
 	switch typ {
 	case effectsType:
 		return typeOf[E]()
@@ -142,6 +142,6 @@ func (t nodeQ[E, A, X, B]) String() string {
 	return fmt.Sprintf("(%v => %v)", t.left, t.right)
 }
 
-func (t nodeQ2[E, B]) String() string {
+func (t nodeQErased[E, B]) String() string {
 	return fmt.Sprintf("[%v => %v]", t.left, t.right)
 }
