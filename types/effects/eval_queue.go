@@ -55,10 +55,10 @@ func (t nodeQ[E, A, X, B]) leftTree_() evalLeftNode[E, A]   { return t.left }
 func (t nodeQ[E, A, X, B]) rightTree() evalTreeNode         { return t.right }
 func (t nodeQ[E, A, X, B]) rightTree_() evalRightNode[E, B] { return t.right }
 
-func (t nodeQ2[E, B]) isLeaf() bool                    { return false }
-func (t nodeQ2[E, B]) leftTree() evalTreeNode          { return t.left }
-func (t nodeQ2[E, B]) rightTree() evalTreeNode         { return t.right }
-func (t nodeQ2[E, B]) rightTree_() evalRightNode[E, B] { return t.right }
+func (t nodeQErased[E, B]) isLeaf() bool                    { return false }
+func (t nodeQErased[E, B]) leftTree() evalTreeNode          { return t.left }
+func (t nodeQErased[E, B]) rightTree() evalTreeNode         { return t.right }
+func (t nodeQErased[E, B]) rightTree_() evalRightNode[E, B] { return t.right }
 
 type leafQ[E any, A any, B any] struct {
 	lifted Arr[E, A, B]
@@ -69,7 +69,9 @@ type nodeQ[E any, A any, X any, B any] struct {
 	right evalQueue[E, X, B]
 }
 
-type nodeQ2[E any, B any] struct {
+// nodeQErased is a partially type-erased version of nodeQ
+// that is only used during the evaluation process.
+type nodeQErased[E any, B any] struct {
 	left  evalTreeNode
 	right evalRightNode[E, B]
 }
@@ -78,12 +80,13 @@ func liftQ[E any, A any, B any](f Arr[E, A, B]) evalQueue[E, A, B] {
 	return leafQ[E, A, B]{lifted: f}
 }
 
-func concatQ[E any, A any, X any, B any](a2x evalQueue[E, A, X], x2b evalQueue[E, X, B]) evalQueue[E, A, B] {
+func composeQ[E any, A any, X any, B any](a2x evalQueue[E, A, X], x2b evalQueue[E, X, B]) evalQueue[E, A, B] {
 	return nodeQ[E, A, X, B]{left: a2x, right: x2b}
 }
 
-func concatQ2Out[E any, B any](a2x evalTreeNode, x2b evalRightNode[E, B]) evalRightNode[E, B] {
-	return nodeQ2[E, B]{left: a2x, right: x2b}
+// composeQErased is a partially type-erased version of composeQ.
+func composeQErased[E any, B any](a2x evalTreeNode, x2b evalRightNode[E, B]) evalRightNode[E, B] {
+	return nodeQErased[E, B]{left: a2x, right: x2b}
 }
 
 func (l leafQ[E, A, B]) qApply(start any) Eff[E, B] {
@@ -91,14 +94,14 @@ func (l leafQ[E, A, B]) qApply(start any) Eff[E, B] {
 }
 
 func (t nodeQ[E, A, X, B]) qApply(start any) Eff[E, B] {
-	return qApplyWithContinuation[E, any /* A */, B](
-		start,   // A
-		t.left,  // evalQueue[E, A, X]
-		t.right, // evalQueue[E, X, B]
+	return qApplyWithContinuation[E, A, B](
+		start.(A), // A
+		t.left,    // evalQueue[E, A, X]
+		t.right,   // evalQueue[E, X, B]
 	) // => Eff[E, B]
 }
 
-func (t nodeQ2[E, B]) qApply(start any) Eff[E, B] {
+func (t nodeQErased[E, B]) qApply(start any) Eff[E, B] {
 	return qApplyWithContinuation[E, any /* A */, B](
 		start,   // A
 		t.left,  // evalQueue[E, A, X]
@@ -122,8 +125,8 @@ func qExtractHeadTail[E any, A any, B any](tl evalLeftNode[E, A], tr evalRightNo
 		return tl.(evalQApply), tr
 	} else {
 		return qExtractHeadTail[E, A, B](
-			tl.leftTree(),                         // evalQueue[E, A, Y]
-			concatQ2Out[E, B](tl.rightTree(), tr), // evalQueue[E, Y, X] => evalQueue[E, X, B] => evalQueue[E, Y, B]
+			tl.leftTree(),                            // evalQueue[E, A, Y]
+			composeQErased[E, B](tl.rightTree(), tr), // evalQueue[E, Y, X] => evalQueue[E, X, B] => evalQueue[E, Y, B]
 		)
 	}
 }
@@ -139,7 +142,7 @@ func qBind[E any, A any, B any](e Eff[E, A], k evalQueue[E, A, B]) Eff[E, B] {
 	case Pure[E, A]:
 		return k.applyTo(m.value)
 	case Cont[E, Start, A]:
-		return newCont(m.effect, concatQ(m.queue, k))
+		return newCont(m.effect, composeQ(m.queue, k))
 	default:
 		panic("unreachable")
 	}
@@ -163,13 +166,14 @@ func qBind2[E any, B any](e effBase, k evalRightNode[E, B]) Eff[E, B] {
 }
 
 func (l leafQ[E, A, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	return newCont[E, Start, B](Union[E, Start](effect), concatQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), l))
+	return newCont[E, Start, B](Union[E, Start](effect), composeQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), l))
 }
 
 func (t nodeQ[E, A, X, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	return newCont[E, Start, B](Union[E, Start](effect), concatQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), t))
+	return newCont[E, Start, B](Union[E, Start](effect), composeQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), t))
 }
 
-func (t nodeQ2[E, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	return newCont[E, Start, B](Union[E, Start](effect), concatQ2Out[E, B](queue, t).(evalQueue[E, Start, B]))
+func (t nodeQErased[E, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
+	panic("not implemented")
+	// return newCont[E, Start, B](Union[E, Start](effect), composeQErased[E, B](queue, t).(evalQueue[E, Start, B]))
 }
