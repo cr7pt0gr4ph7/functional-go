@@ -37,12 +37,14 @@ func _[E Reader[E, R], R any]() {
 	var _ Reader[E, R] = ReaderI[E, R]{}
 }
 
+// DSL implementation for `Reader[E, R]`.
 type ReaderI[E Reader[E, R], R any] struct{}
 
 func (_ ReaderI[E, R]) Ask() Eff[E, R] {
 	return injectEffect[E, R](AskEffect[R]{})
 }
 
+// Effect tag for `Reader[E, R].Ask() Eff[E, R]`.
 type AskEffect[R any] struct{}
 
 func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
@@ -51,12 +53,12 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	}
 
 	switch m := e.EffImpl.(type) {
-	case Cont[E, Start, R]:
+	case Cont[E, R]:
 		switch t := m.effect.(type) {
 		case AskEffect[R]:
-			return RunReader(value, m.queue.applyTo(Start(value)))
+			return RunReader(value, m.queue.applyTo(ValueFromEffect(value)))
 		default:
-			return newCont(Union[E, Start](t), liftQ(qCompose(m.queue, loop)))
+			return newCont(t, liftQ(qCompose(m.queue, loop)))
 		}
 	}
 	return e
@@ -73,12 +75,14 @@ func _[E Writer[E, W], W any]() {
 	var _ Writer[E, W] = WriterI[E, W]{}
 }
 
+// DSL implementation for `Writer[E, W]`.
 type WriterI[E Writer[E, W], W any] struct{}
 
 func (_ WriterI[E, W]) Tell(output W) Eff[E, Unit] {
 	return injectEffect[E, Unit](TellEffect[W]{output: output})
 }
 
+// Effect tag for `Writer[E, W].Tell(output W) Eff[E, Unit]`.
 type TellEffect[W any] struct{ output W }
 
 type WriterResult[T any, W any] struct {
@@ -93,11 +97,11 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 			Value:   m.value,
 			Written: list.Nil[W]{},
 		})
-	case Cont[E, Start, T]:
+	case Cont[E, T]:
 		k := qCompose(m.queue, RunWriter[W, E, T])
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			kx := k(Start(Unit{}))
+			kx := k(ValueFromEffect(Unit{}))
 			return FlatMap(kx, func(x WriterResult[T, W]) Eff[E, WriterResult[T, W]] {
 				return newPure[E](WriterResult[T, W]{
 					Value:   x.Value,
@@ -105,7 +109,7 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 				})
 			})
 		default:
-			return newCont(Union[E, Start](t), liftQ(k))
+			return newCont(t, liftQ(k))
 		}
 	default:
 		panic("unreachable")
@@ -124,6 +128,7 @@ func _[E State[E, S], S any]() {
 	var _ State[E, S] = StateI[E, S]{}
 }
 
+// DSL implementation for `State[E, S]`.
 type StateI[E State[E, S], S any] struct{}
 
 func (_ StateI[E, S]) Get() Eff[E, S] {
@@ -134,6 +139,8 @@ func (_ StateI[E, S]) Set(newState S) Eff[E, Unit] {
 	return injectEffect[E, Unit](SetEffect[S]{newState: newState})
 }
 
+// Effect tag for `State[E, S].Get() Eff[E, S]`.
 type GetEffect[S any] struct{}
 
+// Effect tag for `State[E, S].Set(newState S) Eff[E, Unit]`.
 type SetEffect[S any] struct{ newState S }
