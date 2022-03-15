@@ -114,7 +114,7 @@ func qApplyWithContinuation[E any, A any, B any](start A, tl evalLeftNode[E, A],
 	//  tr hasType evalQueue[E, X, B]) where exists(X)
 
 	head, tail := qExtractHeadTail(tl, tr)
-	return qBind2[E, B](head.apply(start), tail)
+	return qBindErased[E, B](head.apply(start), tail)
 }
 
 func qExtractHeadTail[E any, A any, B any](tl evalLeftNode[E, A], tr evalRightNode[E, B]) (head evalQApply, tail evalRightNode[E, B]) {
@@ -141,14 +141,14 @@ func qBind[E any, A any, B any](e Eff[E, A], k evalQueue[E, A, B]) Eff[E, B] {
 	switch m := e.EffImpl.(type) {
 	case Pure[E, A]:
 		return k.applyTo(m.value)
-	case Cont[E, Start, A]:
+	case Cont[E, A]:
 		return newCont(m.effect, composeQ(m.queue, k))
 	default:
 		panic("unreachable")
 	}
 }
 
-func qBind2[E any, B any](e effBase, k evalRightNode[E, B]) Eff[E, B] {
+func qBindErased[E any, B any](e effBase, k evalRightNode[E, B]) Eff[E, B] {
 	// (e hasType Eff[E, X]
 	//  k hasType evalQueue[E, X, B]) where exists(X)
 
@@ -166,14 +166,14 @@ func qBind2[E any, B any](e effBase, k evalRightNode[E, B]) Eff[E, B] {
 }
 
 func (l leafQ[E, A, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	return newCont[E, Start, B](Union[E, Start](effect), composeQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), l))
+	return newCont[E, B](effect, composeQ[E, ValueFromEffect, A, B](queue.(evalQueue[E, ValueFromEffect, A]), l))
 }
 
 func (t nodeQ[E, A, X, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	return newCont[E, Start, B](Union[E, Start](effect), composeQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), t))
+	return newCont[E, B](effect, composeQ[E, ValueFromEffect, A, B](queue.(evalQueue[E, ValueFromEffect, A]), t))
 }
 
 func (t nodeQErased[E, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
-	panic("not implemented")
-	// return newCont[E, Start, B](Union[E, Start](effect), composeQErased[E, B](queue, t).(evalQueue[E, Start, B]))
+	// TODO It seems that this method is never called & would cause a panic
+	return newCont[E, B](effect, composeQErased[E, B](queue, t).(evalQueue[E, ValueFromEffect, B]))
 }
