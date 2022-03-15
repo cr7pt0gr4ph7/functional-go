@@ -1,4 +1,4 @@
-
+package immutable
 
 // Immutable list with O(1) prepend, append and concat.
 type Chain[T any] struct {
