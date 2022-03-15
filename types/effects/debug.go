@@ -1,9 +1,42 @@
 package effects
 
+// Debugging utilities
+//
+// This file contains debugging helpers that aren't used during normal execution.
+// No code outside of this file should depend on the methods in this file,
+// to enable this file to be omitted from the build as an optimization.
+
 import (
 	"fmt"
 	"reflect"
 )
+
+//
+// Debug helpers for Eff[E, A]
+//
+
+func (p Pure[E, A]) String() string {
+	return fmt.Sprintf("Pure(%v)", p.value)
+}
+
+func (c Cont[E, A, B]) String() string {
+	return fmt.Sprintf("Cont(%v -> %v)", effectTagToString(c.effect), c.queue)
+}
+
+func effectTagToString(tag EffectTag) string {
+	if t, ok := tag.(debuggableEffectTag); ok {
+		return t.effectTagString()
+	}
+	return fmt.Sprintf("%v(%v)", reflect.TypeOf(tag), tag)
+}
+
+type debuggableEffectTag interface {
+	effectTagString() string
+}
+
+//
+// Debug helpers for evalQueue[E, A, B]
+//
 
 type typeToRetrieve byte
 
