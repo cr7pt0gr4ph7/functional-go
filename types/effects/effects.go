@@ -7,6 +7,8 @@ import (
 // Represents the empty tuple.
 type Unit struct{}
 
+var UnitValue Unit
+
 // Constraint type for effects markers.
 type Effect interface {
 	effect()
@@ -31,6 +33,10 @@ func (_ YieldEffect[Y, R]) effectTag() {}
 // Interface type for reprsentations of effects that result in a value of type T.
 type TypedEffectTag[T any] interface {
 	effectResult() T // marker method - do not call
+}
+
+func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](effect L, continuation evalQueue[E, ValueFromEffect, B], effectResult A) Eff[E, B] {
+	return continuation.applyTo(ValueFromEffect(effectResult))
 }
 
 // ===================
@@ -70,7 +76,7 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	case Cont[E, R]:
 		switch t := m.effect.(type) {
 		case AskEffect[R]:
-			return RunReader(value, m.queue.applyTo(ValueFromEffect(value)))
+			return RunReader(value, ApplyContinuationToEffectResult(t, m.queue, value))
 		default:
 			return newCont(t, liftQ(qCompose(m.queue, loop)))
 		}
@@ -122,7 +128,7 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 		k := qCompose(m.queue, RunWriter[W, E, T])
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			kx := k(ValueFromEffect(Unit{}))
+			kx := k(ValueFromEffect(UnitValue))
 			return FlatMap(kx, func(x WriterResult[T, W]) Eff[E, WriterResult[T, W]] {
 				return newPure[E](WriterResult[T, W]{
 					Value:   x.Value,
@@ -175,6 +181,38 @@ func (_ GetEffect[S]) effectResult() S { panic("marker method") }
 type SetEffect[S any] struct{ newState S }
 
 func (_ SetEffect[S]) effectResult() Unit { panic("marker method") }
+
+type StateResult[T any, S any] struct {
+	Value T
+	State S
+}
+
+func RunState[S any, E State[E, S], T any](state S, e Eff[E, T]) Eff[E, StateResult[T, S]] {
+	fmt.Println("RunState", state, e)
+
+	switch m := e.EffImpl.(type) {
+	case Pure[E, T]:
+		return newPure[E](StateResult[T, S]{
+			Value: m.value,
+			State: state,
+		})
+	case Cont[E, T]:
+		switch t := m.effect.(type) {
+		case GetEffect[S]:
+			return RunState(state, ApplyContinuationToEffectResult(t, m.queue, state))
+		case SetEffect[S]:
+			return RunState(t.newState, ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+		default:
+			loop := func(e Eff[E, T]) Eff[E, StateResult[T, S]] {
+				return RunState(state, e)
+			}
+			k := qCompose(m.queue, loop)
+			return newCont(t, liftQ(k))
+		}
+	default:
+		panic("unreachable")
+	}
+}
 
 // ======================
 // :: Coroutine Effect ::
