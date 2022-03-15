@@ -5,74 +5,88 @@ type Arr[E any, A any, B any] func(arg A) Eff[E, B]
 // evalQueue represents a type-aligned sequence of Kleisli arrows.
 type evalQueue[E any, A any, B any] interface {
 	evalQ(eff E, input A) B // marker method - do not call
-	evalQBase
-	evalQIn[E, A]
-	evalQOut[E, B]
+	evalTreeNode
+	evalLeftNode[E, A]
+	evalRightNode[E, B]
 }
 
-type evalQBase interface {
+// A tree node where neither the input type nor the output type
+// are statically known at compile-time.
+type evalTreeNode interface {
 	isLeaf() bool
+	leftTree() evalTreeNode
+	rightTree() evalTreeNode
+}
+
+func (l leafQ[E, A, B]) isLeaf() bool                    { return true }
+func (l leafQ[E, A, B]) leftTree() evalTreeNode          { return nil }
+func (l leafQ[E, A, B]) leftTree_() evalLeftNode[E, B]   { return nil }
+func (l leafQ[E, A, B]) rightTree() evalTreeNode         { return nil }
+func (l leafQ[E, A, B]) rightTree_() evalRightNode[E, B] { return nil }
+
+func (t nodeQ[E, A, X, B]) isLeaf() bool                    { return false }
+func (t nodeQ[E, A, X, B]) leftTree() evalTreeNode          { return t.left }
+func (t nodeQ[E, A, X, B]) leftTree_() evalLeftNode[E, A]   { return t.left }
+func (t nodeQ[E, A, X, B]) rightTree() evalTreeNode         { return t.right }
+func (t nodeQ[E, A, X, B]) rightTree_() evalRightNode[E, B] { return t.right }
+
+func (t nodeQ2[E, B]) isLeaf() bool                    { return false }
+func (t nodeQ2[E, B]) leftTree() evalTreeNode          { return t.left }
+func (t nodeQ2[E, B]) rightTree() evalTreeNode         { return t.right }
+func (t nodeQ2[E, B]) rightTree_() evalRightNode[E, B] { return t.right }
+
+// A tree node where only the input type A is statically known.
+type evalLeftNode[E any, A any] interface {
+	evalTreeNode
+}
+
+// A tree node where only the output type B is statically known.
+type evalRightNode[E any, B any] interface {
+	evalTreeNode
+	rightTree_() evalRightNode[E, B]
+
+	qApply(start any) Eff[E, B]
+	qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B]
+}
+
+type evalQApply interface {
 	apply(start any) effBase
-	leftBase() evalQBase
-	rightBase() evalQBase
-	qApply(start any) effBase
-	qPrepend(effect EffectTag, queue evalQBase) effBase
-}
-
-type evalQIn[E any, A any] interface {
-	evalQBase
-}
-
-type evalQOut[E any, B any] interface {
-	evalQBase
 }
 
 type evalQ[E any, A any, B any] interface {
-	evalQIn[E, A]
-	evalQOut[E, B]
+	evalLeftNode[E, A]
+	evalRightNode[E, B]
 }
 
 func (_ leafQ[E, A, B]) evalQ(eff E, input A) B    { panic("marker method") }
 func (_ nodeQ[E, A, X, B]) evalQ(eff E, input A) B { panic("marker method") }
 
-func (l leafQ[E, A, B]) isLeaf() bool            { return true }
-func (l leafQ[E, A, B]) apply(start any) effBase { return l.lifted(start.(A)) }
-func (l leafQ[E, A, B]) leftBase() evalQBase     { return nil }
-func (l leafQ[E, A, B]) rightBase() evalQBase    { return nil }
-
-func (l leafQ[E, A, B]) qApply(start any) effBase {
-	return qApply(start.(A), evalQueue[E, A, B](l))
+func (l leafQ[E, A, B]) apply(start any) effBase {
+	return l.lifted(start.(A))
 }
 
-func (l leafQ[E, A, B]) qPrepend(effect EffectTag, queue evalQBase) effBase {
+func (l leafQ[E, A, B]) qApply(start any) Eff[E, B] {
+	return l.lifted(start.(A))
+}
+
+func (l leafQ[E, A, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
 	return newCont[E, Start, B](Union[E, Start](effect), concatQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), l))
 }
 
-func (t nodeQ[E, A, X, B]) isLeaf() bool            { return false }
-func (t nodeQ[E, A, X, B]) apply(start any) effBase { panic("not a leaf node") }
-func (t nodeQ[E, A, X, B]) leftBase() evalQBase     { return t.left }
-func (t nodeQ[E, A, X, B]) rightBase() evalQBase    { return t.right }
-
-func (t nodeQ[E, A, X, B]) qApply(start any) effBase {
+func (t nodeQ[E, A, X, B]) qApply(start any) Eff[E, B] {
 	return qApply(start.(A), evalQueue[E, A, B](t))
 }
 
-func (t nodeQ[E, A, X, B]) qPrepend(effect EffectTag, queue evalQBase) effBase {
+func (t nodeQ[E, A, X, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
 	return newCont[E, Start, B](Union[E, Start](effect), concatQ[E, Start, A, B](queue.(evalQueue[E, Start, A]), t))
 }
 
-func (t nodeQ2[E, B]) isLeaf() bool            { return false }
-func (t nodeQ2[E, B]) apply(start any) effBase { panic("not a leaf node") }
-func (t nodeQ2[E, B]) leftBase() evalQBase     { return t.left }
-func (t nodeQ2[E, B]) rightBase() evalQBase    { return t.right }
-
-func (t nodeQ2[E, B]) qApply(start any) effBase {
-	return qApply2[E, B](start, evalQOut[E, B](t))
+func (t nodeQ2[E, B]) qApply(start any) Eff[E, B] {
+	return qApply2[E, B](start, evalRightNode[E, B](t))
 }
 
-func (t nodeQ2[E, B]) qPrepend(effect EffectTag, queue evalQBase) effBase {
-	panic("types")
-	// return newCont(m.effect, concatQ(m.queue, t))
+func (t nodeQ2[E, B]) qPrepend(effect EffectTag, queue evalTreeNode) Eff[E, B] {
+	return newCont[E, Start, B](Union[E, Start](effect), concatQ2Out[E, B](queue, t).(evalQueue[E, Start, B]))
 }
 
 type leafQ[E any, A any, B any] struct {
@@ -85,8 +99,8 @@ type nodeQ[E any, A any, X any, B any] struct {
 }
 
 type nodeQ2[E any, B any] struct {
-	left  evalQBase
-	right evalQBase
+	left  evalTreeNode
+	right evalRightNode[E, B]
 }
 
 func liftQ[E any, A any, B any](f Arr[E, A, B]) evalQueue[E, A, B] {
@@ -97,40 +111,40 @@ func concatQ[E any, A any, X any, B any](a2x evalQueue[E, A, X], x2b evalQueue[E
 	return nodeQ[E, A, X, B]{left: a2x, right: x2b}
 }
 
-func concatQ2Out[E any, B any](a2x evalQBase, x2b evalQOut[E, B]) evalQOut[E, B] {
+func concatQ2Out[E any, B any](a2x evalTreeNode, x2b evalRightNode[E, B]) evalRightNode[E, B] {
 	return nodeQ2[E, B]{left: a2x, right: x2b}
 }
 
 func qApply[E any, A any, B any](start A, q evalQueue[E, A, B]) Eff[E, B] {
 	switch q := q.(type) {
 	case leafQ[E, A, B]:
-		return q.lifted(start)
+		return q.qApply(start)
 	default:
 		// q hasType nodeQ[E, A, X, B] where exists(X):
 		return qApplyInner[E, A, B](
-			start,         // A
-			q.leftBase(),  // evalQueue[E, A, X]
-			q.rightBase(), // evalQueue[E, X, B]
+			start,          // A
+			q.leftTree(),   // evalQueue[E, A, X]
+			q.rightTree_(), // evalQueue[E, X, B]
 		) // => Eff[E, B]
 	}
 }
 
-func qApply2[E any, B any](start any, q evalQOut[E, B]) Eff[E, B] {
+func qApply2[E any, B any](start any, q evalRightNode[E, B]) Eff[E, B] {
 	if q.isLeaf() {
 		// start hasType A
 		// q hasType leafQ[E, A, B]
-		return q.apply(start).(Eff[E, B])
+		return q.qApply(start)
 	} else {
 		// q hasType nodeQ[E, A, X, B] where exists(X):
 		return qApplyInner[E, any /* A */, B](
-			start,         // A
-			q.leftBase(),  // evalQueue[E, A, X]
-			q.rightBase(), // evalQueue[E, X, B]
+			start,          // A
+			q.leftTree(),   // evalQueue[E, A, X]
+			q.rightTree_(), // evalQueue[E, X, B]
 		) // => Eff[E, B]
 	}
 }
 
-func qApplyInner[E any, A any, B any](start A, tl evalQIn[E, A], tr evalQOut[E, B]) Eff[E, B] {
+func qApplyInner[E any, A any, B any](start A, tl evalLeftNode[E, A], tr evalRightNode[E, B]) Eff[E, B] {
 	// (tl hasType evalQueue[E, A, X]
 	//  tr hasType evalQueue[E, X, B]) where exists(X)
 
@@ -138,8 +152,8 @@ func qApplyInner[E any, A any, B any](start A, tl evalQIn[E, A], tr evalQOut[E, 
 		// tl hasType leafQ[E, A, X]
 		// therefore: tl.lifted(start) hasType Eff[E, X]
 		return qBind2[E, B]( // Eff[E, X] => evalQueue[E, X, B] => Eff[E, B]
-			tl.apply(start), // (start: A) => (tl.apply: A => Eff[E, X]) => Eff[E, X]
-			tr,              // evalQueue[E, X, B]
+			tl.(evalQApply).apply(start), // (start: A) => (tl.apply: A => Eff[E, X]) => Eff[E, X]
+			tr,                           // evalQueue[E, X, B]
 		) // => Eff[E, B]
 	} else {
 		// tl hasType nodeQ[E, A, Y, X] where exists(Y)
@@ -147,9 +161,9 @@ func qApplyInner[E any, A any, B any](start A, tl evalQIn[E, A], tr evalQOut[E, 
 		//           tl.right hasType evalQueue[E, Y, X]
 		return qApplyInner[E, A, B](
 			start,         // A
-			tl.leftBase(), // evalQueue[E, A, Y]
+			tl.leftTree(), // evalQueue[E, A, Y]
 			concatQ2Out[E, B](
-				tl.rightBase(), // evalQueue[E, Y, X]
+				tl.rightTree(), // evalQueue[E, Y, X]
 				tr,             // evalQueue[E, X, B]
 			), // => evalQueue[E, Y, B]
 		) // => Eff[E, B]
@@ -178,7 +192,7 @@ func qBind[E any, A any, B any](e Eff[E, A], k evalQueue[E, A, B]) Eff[E, B] {
 	}
 }
 
-func qBind2[E any, B any](e effBase, k evalQBase) Eff[E, B] {
+func qBind2[E any, B any](e effBase, k evalRightNode[E, B]) Eff[E, B] {
 	// (e hasType Eff[E, X]
 	//  k hasType evalQueue[E, X, B]) where exists(X)
 
@@ -186,11 +200,12 @@ func qBind2[E any, B any](e effBase, k evalQBase) Eff[E, B] {
 		// m hasType Pure[E, X]
 		// k hasType evalQueue[E, X, B]
 		// k.qApply(...) hasType Eff[E, B]
-		return k.qApply(m.pureValue()).(Eff[E, B])
+		fmt.Printf("qBind2\n    %#v\n    %#v\n", e, k)
+		return k.qApply(m.pureValue())
 	} else {
 		// m hasType Cont[E, Start, X]:
 		// k hasType evalQueue[E, X, B]
 		// k.qPrepend(...) hasType Eff[E, B]
-		return k.qPrepend(m.getEffect(), m.getQueue()).(Eff[E, B])
+		return k.qPrepend(m.getEffect(), m.getQueue())
 	}
 }
