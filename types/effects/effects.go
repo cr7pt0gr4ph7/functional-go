@@ -1,5 +1,9 @@
 package effects
 
+import (
+	"github.com/cr7pt0gr4ph7/functional-go/types/list"
+)
+
 // Represents the empty tuple.
 type Unit struct{}
 
@@ -79,7 +83,7 @@ type TellEffect[W any] struct{ output W }
 
 type WriterResult[T any, W any] struct {
 	Value   T
-	Written List[W]
+	Written list.List[W]
 }
 
 func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, W]] {
@@ -87,7 +91,7 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 	case Pure[E, T]:
 		return newPure[E](WriterResult[T, W]{
 			Value:   m.value,
-			Written: Nil[W]{},
+			Written: list.Nil[W]{},
 		})
 	case Cont[E, Start, T]:
 		k := qCompose(m.queue, RunWriter[W, E, T])
