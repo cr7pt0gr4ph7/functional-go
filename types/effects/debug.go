@@ -19,7 +19,7 @@ func (p Pure[E, A]) String() string {
 	return fmt.Sprintf("Pure(%v)", p.value)
 }
 
-func (c Cont[E, A, B]) String() string {
+func (c Cont[E, B]) String() string {
 	return fmt.Sprintf("Cont(%v -> %v)", effectTagToString(c.effect), c.queue)
 }
 
