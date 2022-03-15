@@ -8,6 +8,10 @@ type List[T any] interface {
 	Tail() List[T]
 }
 
+func Empty[T]() List[T] {
+	return Nil[T]{}
+}
+
 type Nil[T any] struct{}
 
 func (n Nil[T]) Push(item T) List[T] {
