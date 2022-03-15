@@ -14,17 +14,19 @@ type effImplBase interface {
 	getQueue() evalTreeNode
 }
 
-func (_ Eff[_, _]) effBase()                   {}
-func (e Eff[_, _]) impl() effImplBase          { return e.EffImpl }
-func (_ Pure[_, _]) effImplBase()              {}
+func (_ Eff[_, _]) effBase()          {}
+func (e Eff[_, _]) impl() effImplBase { return e.EffImpl }
+
+func (_ Pure[_, _]) effImplBase()           {}
+func (_ Pure[_, _]) isPure() bool           { return true }
+func (p Pure[_, _]) pureValue() any         { return p.value }
+func (_ Pure[_, _]) getEffect() EffectTag   { panic("pure") }
+func (_ Pure[_, _]) getQueue() evalTreeNode { panic("pure") }
+
 func (_ Cont[_, _, _]) effImplBase()           {}
-func (_ Pure[_, _]) isPure() bool              { return true }
 func (_ Cont[_, _, _]) isPure() bool           { return false }
-func (p Pure[_, _]) pureValue() any            { return p.value }
 func (_ Cont[_, _, _]) pureValue() any         { panic("not pure") }
-func (_ Pure[_, _]) getEffect() EffectTag      { panic("pure") }
 func (c Cont[_, _, _]) getEffect() EffectTag   { return EffectTag(c.effect) }
-func (_ Pure[_, _]) getQueue() evalTreeNode    { panic("pure") }
 func (c Cont[_, _, _]) getQueue() evalTreeNode { return evalTreeNode(c.queue) }
 
 // Generic type.
@@ -118,7 +120,7 @@ func Map[E any, A any, B any](arg Eff[E, A], f func(arg A) B) Eff[E, B] {
 		g := func(arg A) Eff[E, B] {
 			return newPure[E](f(arg))
 		}
-		return newCont(m.effect, concatQ(m.queue, liftQ(g)))
+		return newCont(m.effect, composeQ(m.queue, liftQ(g)))
 	default:
 		panic("unreachable")
 	}
@@ -129,7 +131,7 @@ func FlatMap[E any, A any, B any](arg Eff[E, A], f func(arg A) Eff[E, B]) Eff[E,
 	case Pure[E, A]:
 		return f(m.value)
 	case Cont[E, Start, A]: // hack for missing universal quantification
-		return newCont(m.effect, concatQ(m.queue, liftQ(f)))
+		return newCont(m.effect, composeQ(m.queue, liftQ(f)))
 	default:
 		panic("unreachable")
 	}
