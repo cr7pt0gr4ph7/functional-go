@@ -186,7 +186,6 @@ func qBind2[E any, B any](e effBase, k evalQBase) Eff[E, B] {
 		// m hasType Pure[E, X]
 		// k hasType evalQueue[E, X, B]
 		// k.qApply(...) hasType Eff[E, B]
-		fmt.Printf("qBind2\n    %#v\n    %#v\n", e, k)
 		return k.qApply(m.pureValue()).(Eff[E, B])
 	} else {
 		// m hasType Cont[E, Start, X]:
