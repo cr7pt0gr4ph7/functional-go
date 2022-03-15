@@ -122,7 +122,7 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 	case Pure[E, T]:
 		return newPure[E](WriterResult[T, W]{
 			Value:   m.value,
-			Written: list.Nil[W]{},
+			Written: list.Empty[W](),
 		})
 	case Cont[E, T]:
 		k := qCompose(m.queue, RunWriter[W, E, T])
