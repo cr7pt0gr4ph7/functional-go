@@ -12,19 +12,30 @@ type Effect interface {
 	effect()
 }
 
-func (_ ReaderI[E, R]) effect() {}
-func (_ WriterI[E, W]) effect() {}
-func (_ StateI[E, W]) effect()  {}
+func (_ ReaderI[E, R]) effect()       {}
+func (_ WriterI[E, W]) effect()       {}
+func (_ StateI[E, S]) effect()        {}
+func (_ CoroutineI[E, Y, R]) effect() {}
 
 // Interface type for effect representations.
 type EffectTag interface {
 	effectTag()
 }
 
-func (_ AskEffect[R]) effectTag()  {}
-func (_ TellEffect[W]) effectTag() {}
-func (_ GetEffect[S]) effectTag()  {}
-func (_ SetEffect[S]) effectTag()  {}
+func (_ AskEffect[R]) effectTag()      {}
+func (_ TellEffect[W]) effectTag()     {}
+func (_ GetEffect[S]) effectTag()      {}
+func (_ SetEffect[S]) effectTag()      {}
+func (_ YieldEffect[Y, R]) effectTag() {}
+
+// Interface type for reprsentations of effects that result in a value of type T.
+type TypedEffectTag[T any] interface {
+	effectResult() T // marker method - do not call
+}
+
+// ===================
+// :: Reader Effect ::
+// ===================
 
 // Effect: Read a shared immutable value from the environment.
 type Reader[E any, R any] interface {
@@ -33,8 +44,9 @@ type Reader[E any, R any] interface {
 }
 
 func _[E Reader[E, R], R any]() {
-	// Ensure that ReaderI[E,R] implements Reader[E,R]
+	// Statically ensure that certain interfaces are implemented correctly
 	var _ Reader[E, R] = ReaderI[E, R]{}
+	var _ TypedEffectTag[R] = AskEffect[R]{}
 }
 
 // DSL implementation for `Reader[E, R]`.
@@ -46,6 +58,8 @@ func (_ ReaderI[E, R]) Ask() Eff[E, R] {
 
 // Effect tag for `Reader[E, R].Ask() Eff[E, R]`.
 type AskEffect[R any] struct{}
+
+func (_ AskEffect[R]) effectResult() R { panic("marker method") }
 
 func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	loop := func(e Eff[E, R]) Eff[E, R] {
@@ -64,6 +78,10 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	return e
 }
 
+// ===================
+// :: Writer Effect ::
+// ===================
+
 // Effect: Send outputs to the effects environment.
 type Writer[E any, W any] interface {
 	Effect
@@ -71,8 +89,9 @@ type Writer[E any, W any] interface {
 }
 
 func _[E Writer[E, W], W any]() {
-	// Ensure that WriterI[E,W] implements Writer[E,W]
+	// Statically ensure that certain interfaces are implemented correctly
 	var _ Writer[E, W] = WriterI[E, W]{}
+	var _ TypedEffectTag[Unit] = TellEffect[W]{}
 }
 
 // DSL implementation for `Writer[E, W]`.
@@ -84,6 +103,8 @@ func (_ WriterI[E, W]) Tell(output W) Eff[E, Unit] {
 
 // Effect tag for `Writer[E, W].Tell(output W) Eff[E, Unit]`.
 type TellEffect[W any] struct{ output W }
+
+func (_ TellEffect[W]) effectResult() Unit { panic("marker method") }
 
 type WriterResult[T any, W any] struct {
 	Value   T
@@ -116,6 +137,10 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 	}
 }
 
+// ==================
+// :: State Effect ::
+// ==================
+
 // Effect: Provides read/write access to a shared updatable state value of type S.
 type State[E any, S any] interface {
 	Effect
@@ -124,8 +149,10 @@ type State[E any, S any] interface {
 }
 
 func _[E State[E, S], S any]() {
-	// Ensure that StateI[E,S] implements State[E,S]
+	// Statically ensure that certain interfaces are implemented correctly
 	var _ State[E, S] = StateI[E, S]{}
+	var _ TypedEffectTag[S] = GetEffect[S]{}
+	var _ TypedEffectTag[Unit] = SetEffect[S]{}
 }
 
 // DSL implementation for `State[E, S]`.
@@ -142,5 +169,43 @@ func (_ StateI[E, S]) Set(newState S) Eff[E, Unit] {
 // Effect tag for `State[E, S].Get() Eff[E, S]`.
 type GetEffect[S any] struct{}
 
-// Effect tag for `State[E, S].Set(newState S) Eff[E, Unit]`.
+func (_ GetEffect[S]) effectResult() S { panic("marker method") }
+
+// Effect tag for `State[_, S].Set(newState S) Eff[E, Unit]`.
 type SetEffect[S any] struct{ newState S }
+
+func (_ SetEffect[S]) effectResult() Unit { panic("marker method") }
+
+// ======================
+// :: Coroutine Effect ::
+// ======================
+
+// Effect: A type representing a yielding of control.
+//
+// The type variables have the following meaning:
+//
+// * A: The current type.
+// * Y: The input to the continuation function.
+// * R: The output of the continuation.
+type Coroutine[E any, Y any, R any] interface {
+	Effect
+	Yield(output Y) Eff[E, R]
+}
+
+func _[E Coroutine[E, Y, R], Y any, R any]() {
+	// Statically ensure that certain interfaces are implemented correctly
+	var _ Coroutine[E, Y, R] = CoroutineI[E, Y, R]{}
+	var _ TypedEffectTag[R] = YieldEffect[Y, R]{}
+}
+
+// DSL implementation for `Coroutine[E, Y, R]`.
+type CoroutineI[E Coroutine[E, Y, R], Y any, R any] struct{}
+
+func (_ CoroutineI[E, Y, R]) Yield(output Y) Eff[E, R] {
+	return injectEffect[E, R](YieldEffect[Y, R]{output: output})
+}
+
+// Effect tag for `Couroutine[E, Y, R].Yield(output Y) Eff[E, R]`.
+type YieldEffect[Y any, R any] struct{ output Y }
+
+func (_ YieldEffect[Y, R]) effectResult() R { panic("marker method") }
