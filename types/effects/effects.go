@@ -52,7 +52,7 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 		case AskEffect[R]:
 			return RunReader(value, qApply(m.queue, Start(value)))
 		default:
-			return newCont(Union[E, Start](t), qCompose(m.queue, loop))
+			return newCont(Union[E, Start](t), liftQ(qCompose(m.queue, loop)))
 		}
 	}
 	return e
@@ -93,12 +93,15 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 		k := qCompose(m.queue, RunWriter[W, E, T])
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			return newPure[E](WriterResult[T, W]{
-			Value:   m.value,
-			Written: x.Written.Push(t.output),
-		})
+			kx := k(Start(Unit{}))
+			return FlatMap(kx, func(x WriterResult[T, W]) Eff[E, WriterResult[T, W]] {
+				return newPure[E](WriterResult[T, W]{
+					Value:   x.Value,
+					Written: x.Written.Push(t.output),
+				})
+			})
 		default:
-			return newCont(Union[E, Start](t), k)
+			return newCont(Union[E, Start](t), liftQ(k))
 		}
 	default:
 		panic("unreachable")
