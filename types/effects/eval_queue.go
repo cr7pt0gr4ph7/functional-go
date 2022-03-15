@@ -121,7 +121,7 @@ func qApply[E any, A any, B any](start A, q evalQueue[E, A, B]) Eff[E, B] {
 		return q.qApply(start)
 	default:
 		// q hasType nodeQ[E, A, X, B] where exists(X):
-		return qApplyInner[E, A, B](
+		return qApplyWithContinuation[E, A, B](
 			start,          // A
 			q.leftTree(),   // evalQueue[E, A, X]
 			q.rightTree_(), // evalQueue[E, X, B]
@@ -136,7 +136,7 @@ func qApply2[E any, B any](start any, q evalRightNode[E, B]) Eff[E, B] {
 		return q.qApply(start)
 	} else {
 		// q hasType nodeQ[E, A, X, B] where exists(X):
-		return qApplyInner[E, any /* A */, B](
+		return qApplyWithContinuation[E, any /* A */, B](
 			start,          // A
 			q.leftTree(),   // evalQueue[E, A, X]
 			q.rightTree_(), // evalQueue[E, X, B]
@@ -144,7 +144,7 @@ func qApply2[E any, B any](start any, q evalRightNode[E, B]) Eff[E, B] {
 	}
 }
 
-func qApplyInner[E any, A any, B any](start A, tl evalLeftNode[E, A], tr evalRightNode[E, B]) Eff[E, B] {
+func qApplyWithContinuation[E any, A any, B any](start A, tl evalLeftNode[E, A], tr evalRightNode[E, B]) Eff[E, B] {
 	// (tl hasType evalQueue[E, A, X]
 	//  tr hasType evalQueue[E, X, B]) where exists(X)
 
@@ -159,7 +159,7 @@ func qApplyInner[E any, A any, B any](start A, tl evalLeftNode[E, A], tr evalRig
 		// tl hasType nodeQ[E, A, Y, X] where exists(Y)
 		// therefore tl.left  hasType evalQueue[E, A, Y]
 		//           tl.right hasType evalQueue[E, Y, X]
-		return qApplyInner[E, A, B](
+		return qApplyWithContinuation[E, A, B](
 			start,         // A
 			tl.leftTree(), // evalQueue[E, A, Y]
 			concatQ2Out[E, B](
