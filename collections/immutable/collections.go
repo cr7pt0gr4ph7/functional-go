@@ -1,5 +1,9 @@
 package immutable
 
+import (
+	"github.com/cr7pt0gr4ph7/functional-go/collections/immutable/cursor"
+)
+
 // Represents an immutable list.
 type List[L List_[L, T], T any] interface {
 	List_[L, T]
@@ -15,27 +19,9 @@ type List_[L any, T any] interface {
 	Concat(other L) L
 	Empty() bool
 	Len() int
-	Cursor() Cursor[T]
+	Cursor() cursor.Cursor[T]
 }
 
-type Cursor[T any] interface {
-	Advance() (T, Cursor[T], bool)
-}
-
-// CursorIter implements a mutable iterator over an immutable cursor.
-type CursorIter[C interface{ Advance() (T, C, bool) }, T any] struct {
-	Cursor C
-}
-
-func ToCursorIter[T any, C interface{ Advance() (T, C, bool) }](cursor C) CursorIter[C, T] {
-	return CursorIter[C, T]{cursor}
-}
-
-func NewCursorIter[T any, C interface{ Advance() (T, C, bool) }](cursor C) *CursorIter[C, T] {
-	return &CursorIter[C, T]{cursor}
-}
-
-func (it *CursorIter[C, T]) Next() (item T, ok bool) {
-	item, it.Cursor, ok = it.Cursor.Advance()
-	return
-}
+// NOTE: Generic type aliases are not possible (as of Go 1.18),
+//       therefore we cannot provide the following alias:
+// type Cursor[T any] = cursor.Cursor[T]
