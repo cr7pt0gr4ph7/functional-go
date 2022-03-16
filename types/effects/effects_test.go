@@ -1,5 +1,9 @@
 package effects
 
+import (
+	"fmt"
+)
+
 type MyEffects interface {
 	Reader[MyEffects, float32]
 	Writer[MyEffects, string]
