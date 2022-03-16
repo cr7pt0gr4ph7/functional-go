@@ -3,8 +3,11 @@ package effects
 // Debugging utilities
 //
 // This file contains debugging helpers that aren't used during normal execution.
-// No code outside of this file should depend on the methods in this file,
+// Almost no code outside of this file should depend on the methods in this file,
 // to enable this file to be omitted from the build as an optimization.
+//
+// Methods that ARE referenced by outside code should have a stub provided in
+// `debug_stubs.go`.
 
 import (
 	"fmt"
@@ -113,6 +116,27 @@ func (l leafQ[E, A, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Typ
 	}
 }
 
+func (t runQ[E, B, C]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
+	switch typ {
+	case effectsType:
+		return typeOf[E]()
+	case leftType:
+		if r == recurseAlways || r == recurseIfNeeded {
+			return getType(t.wrapped, leftType, r)
+		}
+		return nil
+	case middleType:
+		if r == recurseAlways {
+			return getType(t.wrapped, rightType, r)
+		}
+		return typeOf[B]()
+	case rightType:
+		return typeOf[C]()
+	default:
+		return nil
+	}
+}
+
 func (t nodeQErased[E, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
 	switch typ {
 	case effectsType:
@@ -147,6 +171,10 @@ func (l leafQ[E, A, B]) String() string {
 	} else {
 		return fmt.Sprintf("{%v => %v}", l.getType(leftType, recurseIfNeeded), l.getType(rightType, recurseIfNeeded))
 	}
+}
+
+func (t runQ[E, B, C]) String() string {
+	return fmt.Sprintf("[%v ==> %v]", t.wrapped, t.debugTag)
 }
 
 func (t nodeQErased[E, B]) String() string {
