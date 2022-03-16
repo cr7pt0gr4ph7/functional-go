@@ -32,25 +32,6 @@ type TypedEffectTag[T any] interface {
 	effectResult() T // marker method - do not call
 }
 
-func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](effect L, continuation evalRightNode[E, B], effectResult A) Eff[E, B] {
-	return continuation.qApply(effectResult)
-}
-
-type Handler[E any, A any, B any] func(e Eff[E, A]) Eff[E, B]
-
-type HandlerWithState[E any, S any, A any, B any] func(state S, e Eff[E, A]) Eff[E, B]
-
-func ForwardEffect[E any, A any, B any](m Cont[E, A], handler Handler[E, A, B], debugTag string) Eff[E, B] {
-	return newContUnchecked(m.effect, composeRunQ(m.queue, handler, debugTag))
-}
-
-func ForwardEffectWithState[E any, S any, A any, B any](m Cont[E, A], handler HandlerWithState[E, S, A, B], state S, debugTag string) Eff[E, B] {
-	loop := func(e Eff[E, A]) Eff[E, B] {
-		return handler(state, e)
-	}
-	return newContUnchecked(m.effect, composeRunQ(m.queue, loop, debugTag))
-}
-
 // ===================
 // :: Reader Effect ::
 // ===================
@@ -104,10 +85,13 @@ type Writer[E any, W any] interface {
 	Tell(output W) Eff[E, Unit]
 }
 
-func _[E Writer[E, W], W any]() {
+func _[E Writer[E, W], WL listBuilder[WL, W], W any, T any]() {
 	// Statically ensure that certain interfaces are implemented correctly
 	var _ Writer[E, W] = WriterI[E, W]{}
 	var _ TypedEffectTag[Unit] = TellEffect[W]{}
+	var _ Interpreter[E, T, WriterResult[T, WL]] = runWriter[WL, W, E, T]{}
+	var _ Interpreter[E, T, WriterResult[T, WL]] = runWriterReverse[WL, W, E, T]{}
+	var _ InterpreterWithState[runWriterReverse[WL, W, E, T], WL] = runWriterReverse[WL, W, E, T]{}
 }
 
 // DSL implementation for `Writer[E, W]`.
@@ -132,56 +116,72 @@ type listBuilder[Self any, T any] interface {
 }
 
 func RunWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
-	log.OnRunEffect("RunWriter", e)
+	return runWriter[WL, W, E, T]{}.Run(e)
+}
 
-	switch m := e.EffImpl.(type) {
-	case Pure[E, T]:
-		// We expect the default value of WL
-		// to be a valid empty list instance
-		var emptyList WL
-		return newPure[E](WriterResult[T, WL]{
-			Value:   m.value,
-			Written: emptyList,
-		})
-	case Cont[E, T]:
-		switch t := m.effect.(type) {
-		case TellEffect[W]:
-			kx := RunWriter[WL, W](ApplyContinuationToEffectResult(t, m.queue, UnitValue))
-			return FlatMap(kx, func(x WriterResult[T, WL]) Eff[E, WriterResult[T, WL]] {
-				return newPure[E](WriterResult[T, WL]{
-					Value:   x.Value,
-					Written: x.Written.Push(t.output),
-				})
-			})
-		default:
-			// Unknown effect type, delegate to outer handler
-			return ForwardEffect(m, RunWriter[WL, W, E, T], "RunWriter")
-		}
-	default:
-		panic("unreachable")
+type runWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any] struct{}
+
+func (r runWriter[WL, W, E, T]) Name() string {
+	return "RunWriter"
+}
+
+func (r runWriter[WL, W, E, T]) Run(e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+	return RunImpl[E, T, WriterResult[T, WL]](r, e)
+}
+
+func (r runWriter[WL, W, E, T]) HandlePure(value T) WriterResult[T, WL] {
+	// We expect the default value of WL to be a valid empty list instance
+	var emptyList WL
+	return WriterResult[T, WL]{
+		Value:   value,
+		Written: emptyList,
 	}
 }
 
-func RunWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any](written WL, e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
-	log.OnRunEffect("RunWriterReverse", written, e)
+func (r runWriter[WL, W, E, T]) HandleEffect(effect EffectTag, m Cont[E, T]) (_ Eff[E, WriterResult[T, WL]]) {
+	switch t := m.effect.(type) {
+	case TellEffect[W]:
+		k := r.Run(ApplyContinuationToEffectResult(t, m.queue, UnitValue))
 
-	switch m := e.EffImpl.(type) {
-	case Pure[E, T]:
-		return newPure[E](WriterResult[T, WL]{
-			Value:   m.value,
-			Written: written,
+		return FlatMap(k, func(x WriterResult[T, WL]) Eff[E, WriterResult[T, WL]] {
+			return newPure[E](WriterResult[T, WL]{
+				Value:   x.Value,
+				Written: x.Written.Push(t.output),
+			})
 		})
-	case Cont[E, T]:
-		switch t := m.effect.(type) {
-		case TellEffect[W]:
-			return RunWriterReverse[WL, W](written.Push(t.output), ApplyContinuationToEffectResult(t, m.queue, UnitValue))
-		default:
-			// Unknown effect type, delegate to outer handler
-			return ForwardEffectWithState(m, RunWriterReverse[WL, W, E, T], written, "RunWriterReverse")
-		}
-	default:
-		panic("unreachable")
 	}
+	return
+}
+
+func RunWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any](written WL, e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+	return runWriterReverse[WL, W, E, T]{}.WithState(written).Run(e)
+}
+
+type runWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any] struct {
+	InterpreterWithStateImpl[WL, runWriterReverse[WL, W, E, T], *runWriterReverse[WL, W, E, T]]
+}
+
+func (r runWriterReverse[WL, W, E, T]) Name() string {
+	return "RunWriterReverse"
+}
+
+func (r runWriterReverse[WL, W, E, T]) Run(e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+	return RunImpl[E, T, WriterResult[T, WL]](r, e)
+}
+
+func (r runWriterReverse[WL, W, E, T]) HandlePure(value T) WriterResult[T, WL] {
+	return WriterResult[T, WL]{
+		Value:   value,
+		Written: r.State(),
+	}
+}
+
+func (r runWriterReverse[WL, W, E, T]) HandleEffect(effect EffectTag, m Cont[E, T]) (_ Eff[E, WriterResult[T, WL]]) {
+	switch t := m.effect.(type) {
+	case TellEffect[W]:
+		return r.WithState(r.State().Push(t.output)).Run(ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+	}
+	return
 }
 
 // ==================
@@ -195,11 +195,13 @@ type State[E any, S any] interface {
 	Set(newState S) Eff[E, Unit]
 }
 
-func _[E State[E, S], S any]() {
+func _[E State[E, S], S any, T any]() {
 	// Statically ensure that certain interfaces are implemented correctly
 	var _ State[E, S] = StateI[E, S]{}
 	var _ TypedEffectTag[S] = GetEffect[S]{}
 	var _ TypedEffectTag[Unit] = SetEffect[S]{}
+	var _ Interpreter[E, T, StateResult[T, S]] = runState[S, E, T]{}
+	var _ InterpreterWithState[runState[S, E, T], S] = runState[S, E, T]{}
 }
 
 // DSL implementation for `State[E, S]`.
@@ -229,27 +231,36 @@ type StateResult[T any, S any] struct {
 }
 
 func RunState[S any, E State[E, S], T any](state S, e Eff[E, T]) Eff[E, StateResult[T, S]] {
-	log.OnRunEffect("RunState", state, e)
+	return runState[S, E, T]{}.WithState(state).Run(e)
+}
 
-	switch m := e.EffImpl.(type) {
-	case Pure[E, T]:
-		return newPure[E](StateResult[T, S]{
-			Value: m.value,
-			State: state,
-		})
-	case Cont[E, T]:
-		switch t := m.effect.(type) {
-		case GetEffect[S]:
-			return RunState(state, ApplyContinuationToEffectResult(t, m.queue, state))
-		case SetEffect[S]:
-			return RunState(t.newState, ApplyContinuationToEffectResult(t, m.queue, UnitValue))
-		default:
-			// Unknown effect type, delegate to outer handler
-			return ForwardEffectWithState(m, RunState[S, E, T], state, "RunState")
-		}
-	default:
-		panic("unreachable")
+type runState[S any, E State[E, S], T any] struct {
+	InterpreterWithStateImpl[S, runState[S, E, T], *runState[S, E, T]]
+}
+
+func (r runState[_, _, _]) Name() string {
+	return "RunState"
+}
+
+func (r runState[S, E, T]) Run(e Eff[E, T]) Eff[E, StateResult[T, S]] {
+	return RunImpl[E, T, StateResult[T, S]](r, e)
+}
+
+func (r runState[S, _, T]) HandlePure(value T) StateResult[T, S] {
+	return StateResult[T, S]{
+		Value: value,
+		State: r.State(),
 	}
+}
+
+func (r runState[S, E, T]) HandleEffect(effect EffectTag, m Cont[E, T]) (_ Eff[E, StateResult[T, S]]) {
+	switch t := m.effect.(type) {
+	case GetEffect[S]:
+		return r.Run(ApplyContinuationToEffectResult(t, m.queue, r.State()))
+	case SetEffect[S]:
+		return r.WithState(t.newState).Run(ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+	}
+	return
 }
 
 // ======================
