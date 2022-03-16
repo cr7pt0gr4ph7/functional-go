@@ -12,6 +12,18 @@ import (
 )
 
 //
+// Debug helpers for effects interpreters
+//
+
+type logType struct{}
+
+var log logType
+
+func (_ logType) OnRunEffect(runnerName string, args ...any) {
+	fmt.Println(append([]any{runnerName}, args...)...)
+}
+
+//
 // Debug helpers for Eff[E, A]
 //
 
