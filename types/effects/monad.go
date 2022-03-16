@@ -83,6 +83,9 @@ func newCont[E any, A any, B any, L TypedEffectTag[A]](effect L, queue evalQueue
 	})
 }
 
+// Note: This method does not verify that the effect tag is supported by any of
+// the effect providers declared by `E`, and should therefore be used with care.
+// Its intended use case is implementing your own custom effects.
 func injectEffect[E any, T any, L TypedEffectTag[T]](tag L) Eff[E, T] {
 	return newCont(tag, passThruQ[E, T]())
 }
@@ -94,6 +97,15 @@ func newContUnchecked[E any, B any](effect EffectTag, queue evalRightNode[E, B])
 	})
 }
 
+// Note: In addition to not verifying that the effect tag is supported
+// by any of the effect providers declared by `E` (like `injectEffect`),
+// this method also does not verify that `T` is actually the type of the
+// values that will be injected by the effects interpreter when handling
+// the given effect tag `tag`.
+//
+// If `T` does not match the type of values injected by the effects interpreter
+// when handling the `tag`, runtime type mismatches (and, consequently, runtime panics)
+// will be the result; this is the reason for the `Unchecked` suffix of this function's name.
 func injectEffectUnchecked[E any, T any, L EffectTag](tag L) Eff[E, T] {
 	return newContUnchecked[E, T](tag, passThruQ[E, T]())
 }
