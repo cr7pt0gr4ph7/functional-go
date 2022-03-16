@@ -1,9 +1,5 @@
 package effects
 
-import (
-	"fmt"
-)
-
 // Represents the empty tuple.
 type Unit struct{}
 
@@ -69,6 +65,8 @@ type AskEffect[R any] struct{}
 func (_ AskEffect[R]) effectResult() R { panic("marker method") }
 
 func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
+	log.OnRunEffect("RunReader", value, e)
+
 	loop := func(e Eff[E, R]) Eff[E, R] {
 		return RunReader(value, e)
 	}
@@ -123,6 +121,8 @@ type listBuilder[Self any, T any] interface {
 }
 
 func RunWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+	log.OnRunEffect("RunWriter", e)
+
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
 		// We expect the default value of WL
@@ -151,6 +151,8 @@ func RunWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any](e Eff[E, T])
 }
 
 func RunWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any](written WL, e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+	log.OnRunEffect("RunWriterReverse", written, e)
+
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
 		return newPure[E](WriterResult[T, WL]{
@@ -217,7 +219,7 @@ type StateResult[T any, S any] struct {
 }
 
 func RunState[S any, E State[E, S], T any](state S, e Eff[E, T]) Eff[E, StateResult[T, S]] {
-	fmt.Println("RunState", state, e)
+	log.OnRunEffect("RunState", state, e)
 
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
