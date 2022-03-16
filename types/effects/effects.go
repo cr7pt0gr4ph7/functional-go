@@ -279,10 +279,11 @@ type Coroutine[E any, Y any, R any] interface {
 	Yield(output Y) Eff[E, R]
 }
 
-func _[E Coroutine[E, Y, R], Y any, R any]() {
+func _[E Coroutine[E, Y, R], Y any, R any, T any]() {
 	// Statically ensure that certain interfaces are implemented correctly
 	var _ Coroutine[E, Y, R] = CoroutineI[E, Y, R]{}
 	var _ TypedEffectTag[R] = YieldEffect[Y, R]{}
+	var _ Interpreter[E, T, CoroutineResult[Y, R, T]] = runCoroutine[E, Y, R, T]{}
 }
 
 // DSL implementation for `Coroutine[E, Y, R]`.
@@ -296,3 +297,84 @@ func (_ CoroutineI[E, Y, R]) Yield(output Y) Eff[E, R] {
 type YieldEffect[Y any, R any] struct{ output Y }
 
 func (_ YieldEffect[Y, R]) effectResult() R { panic("marker method") }
+
+type CoroutineResume[Y any, R any, T any] func(resumeWith R) CoroutineResult[Y, R, T]
+
+type CoroutineResult[Y any, R any, T any] struct {
+	isYield bool
+	result  T
+	yielded Y
+	resume  CoroutineResume[Y, R, T]
+}
+
+// Coroutine is done with a result value of type T.
+func Done[Y any, R any, T any](value T) CoroutineResult[Y, R, T] {
+	return CoroutineResult[Y, R, T]{
+		isYield: false,
+		result:  value,
+	}
+}
+
+// Reporting a value of the type Y, and resuming with the value of type R,
+// possibly ending with a value of type T.
+func Yield[Y any, R any, T any](value Y, resume CoroutineResume[Y, R, T]) CoroutineResult[Y, R, T] {
+	return CoroutineResult[Y, R, T]{
+		isYield: true,
+		yielded: value,
+		resume:  resume,
+	}
+}
+
+// Whether this is the final result of the coroutine.
+func (r CoroutineResult[Y, R, T]) IsDone() bool {
+	return !r.isYield
+}
+
+func (r CoroutineResult[Y, R, T]) Done() (result T, ok bool) {
+	return r.result, !r.isYield
+}
+
+// Whether this is an intermediate result of the coroutine.
+func (r CoroutineResult[Y, R, T]) IsYield() bool {
+	return r.isYield
+}
+
+func (r CoroutineResult[Y, R, T]) Yielded() (yielded Y, ok bool) {
+	return r.yielded, r.isYield
+}
+
+// Resume the coroutine with the provided `value`.
+func (r CoroutineResult[Y, R, T]) Resume(value R) CoroutineResult[Y, R, T] {
+	if !r.isYield {
+		panic("cannot resume: coroutine has already completed")
+	}
+	return r.resume(value)
+}
+
+func RunCoroutine[Y any, R any, E Coroutine[E, Y, R], T any](e Eff[E, T]) Eff[E, CoroutineResult[Y, R, T]] {
+	return runCoroutine[E, Y, R, T]{}.Run(e)
+}
+
+type runCoroutine[E Coroutine[E, Y, R], Y any, R any, T any] struct{}
+
+func (r runCoroutine[E, Y, R, T]) Name() string {
+	return "RunState"
+}
+
+func (r runCoroutine[E, Y, R, T]) Run(e Eff[E, T]) Eff[E, CoroutineResult[Y, R, T]] {
+	return RunImpl[E, T, CoroutineResult[Y, R, T]](r, e)
+}
+
+func (r runCoroutine[E, Y, R, T]) HandlePure(value T) CoroutineResult[Y, R, T] {
+	return Done[Y, R](value)
+}
+
+func (r runCoroutine[E, Y, R, T]) HandleEffect(effect EffectTag, m Cont[E, T]) (_ Eff[E, CoroutineResult[Y, R, T]]) {
+	switch t := m.effect.(type) {
+	case YieldEffect[Y, R]:
+		return Return[E](Yield(t.output, func(resumeWith R) CoroutineResult[Y, R, T] {
+			return RunPureOrFail(r.Run(ApplyContinuationToEffectResult(t, m.queue, resumeWith)))
+		}))
+	}
+	return
+}
