@@ -71,6 +71,21 @@ func getType(node evalTreeNode, typ typeToRetrieve, r recursionEnum) reflect.Typ
 	return node.(debuggableTreeNode).getType(typ, r)
 }
 
+func (l identQ[E, A]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
+	switch typ {
+	case effectsType:
+		return typeOf[E]()
+	case leftType:
+		return typeOf[A]()
+	case middleType:
+		return nil
+	case rightType:
+		return typeOf[A]()
+	default:
+		return nil
+	}
+}
+
 func (l leafQ[E, A, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
 	switch typ {
 	case effectsType:
@@ -80,30 +95,6 @@ func (l leafQ[E, A, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Typ
 	case middleType:
 		return nil
 	case rightType:
-		return typeOf[B]()
-	default:
-		return nil
-	}
-}
-
-func (t nodeQ[E, A, X, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.Type {
-	switch typ {
-	case effectsType:
-		return typeOf[E]()
-	case leftType:
-		if r == recurseAlways {
-			return getType(t.left, leftType, r)
-		}
-		return typeOf[A]()
-	case middleType:
-		if r == recurseAlways {
-			return getType(t.left, rightType, r)
-		}
-		return typeOf[X]()
-	case rightType:
-		if r == recurseAlways {
-			return getType(t.right, rightType, r)
-		}
 		return typeOf[B]()
 	default:
 		return nil
@@ -134,14 +125,18 @@ func (t nodeQErased[E, B]) getType(typ typeToRetrieve, r recursionEnum) reflect.
 	}
 }
 
-func (l leafQ[E, A, B]) String() string {
-	return fmt.Sprintf("{%v => %v}", l.getType(leftType, recurseIfNeeded), l.getType(rightType, recurseIfNeeded))
+func (l identQ[E, A]) String() string {
+	return fmt.Sprintf("{PassThru: %v}", l.getType(leftType, recurseIfNeeded))
 }
 
-func (t nodeQ[E, A, X, B]) String() string {
-	return fmt.Sprintf("(%v => %v)", t.left, t.right)
+func (l leafQ[E, A, B]) String() string {
+	if len(l.debugTag) > 0 {
+		return fmt.Sprintf("{%v: %v => %v}", l.debugTag, l.getType(leftType, recurseIfNeeded), l.getType(rightType, recurseIfNeeded))
+	} else {
+		return fmt.Sprintf("{%v => %v}", l.getType(leftType, recurseIfNeeded), l.getType(rightType, recurseIfNeeded))
+	}
 }
 
 func (t nodeQErased[E, B]) String() string {
-	return fmt.Sprintf("[%v => %v]", t.left, t.right)
+	return fmt.Sprintf("(%v => %v)", t.left, t.right)
 }
