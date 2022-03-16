@@ -2,7 +2,6 @@ package effects
 
 import (
 	"fmt"
-	"github.com/cr7pt0gr4ph7/functional-go/types/list"
 )
 
 // Represents the empty tuple.
@@ -116,48 +115,55 @@ func (_ TellEffect[W]) effectResult() Unit { panic("marker method") }
 
 type WriterResult[T any, W any] struct {
 	Value   T
-	Written list.List[W]
+	Written W
 }
 
-func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+type listBuilder[Self any, T any] interface {
+	Push(item T) Self
+}
+
+func RunWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
-		return newPure[E](WriterResult[T, W]{
+		// We expect the default value of WL
+		// to be a valid empty list instance
+		var emptyList WL
+		return newPure[E](WriterResult[T, WL]{
 			Value:   m.value,
-			Written: list.Empty[W](),
+			Written: emptyList,
 		})
 	case Cont[E, T]:
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			kx := RunWriter[W](ApplyContinuationToEffectResult(t, m.queue, UnitValue))
-			return FlatMap(kx, func(x WriterResult[T, W]) Eff[E, WriterResult[T, W]] {
-				return newPure[E](WriterResult[T, W]{
+			kx := RunWriter[WL, W](ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+			return FlatMap(kx, func(x WriterResult[T, WL]) Eff[E, WriterResult[T, WL]] {
+				return newPure[E](WriterResult[T, WL]{
 					Value:   x.Value,
 					Written: x.Written.Push(t.output),
 				})
 			})
 		default:
-			return newContUnchecked(t, composeRunQ(m.queue, RunWriter[W, E, T], "RunWriter"))
+			return newContUnchecked(t, composeRunQ(m.queue, RunWriter[WL, W, E, T], "RunWriter"))
 		}
 	default:
 		panic("unreachable")
 	}
 }
 
-func RunWriterReverse[W any, E Writer[E, W], T any](l list.List[W], e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+func RunWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any](written WL, e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
-		return newPure[E](WriterResult[T, W]{
+		return newPure[E](WriterResult[T, WL]{
 			Value:   m.value,
-			Written: l,
+			Written: written,
 		})
 	case Cont[E, T]:
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			return RunWriterReverse[W](l.Push(t.output), ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+			return RunWriterReverse[WL, W](written.Push(t.output), ApplyContinuationToEffectResult(t, m.queue, UnitValue))
 		default:
-			loop := func(e Eff[E, T]) Eff[E, WriterResult[T, W]] {
-				return RunWriterReverse(l, e)
+			loop := func(e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
+				return RunWriterReverse[WL, W](written, e)
 			}
 			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunWriterReverse"))
 		}
