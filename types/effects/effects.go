@@ -1,6 +1,7 @@
 package effects
 
 import (
+	"fmt"
 	"github.com/cr7pt0gr4ph7/functional-go/types/list"
 )
 
@@ -143,7 +144,7 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 	}
 }
 
-func RunWriterReverse[W any, E Writer[E, W], T any](l List[W], e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+func RunWriterReverse[W any, E Writer[E, W], T any](l list.List[W], e Eff[E, T]) Eff[E, WriterResult[T, W]] {
 	switch m := e.EffImpl.(type) {
 	case Pure[E, T]:
 		return newPure[E](WriterResult[T, W]{
