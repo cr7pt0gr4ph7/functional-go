@@ -36,6 +36,21 @@ func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](e
 	return continuation.qApply(effectResult)
 }
 
+type Handler[E any, A any, B any] func(e Eff[E, A]) Eff[E, B]
+
+type HandlerWithState[E any, S any, A any, B any] func(state S, e Eff[E, A]) Eff[E, B]
+
+func ForwardEffect[E any, A any, B any](m Cont[E, A], handler Handler[E, A, B], debugTag string) Eff[E, B] {
+	return newContUnchecked(m.effect, composeRunQ(m.queue, handler, debugTag))
+}
+
+func ForwardEffectWithState[E any, S any, A any, B any](m Cont[E, A], handler HandlerWithState[E, S, A, B], state S, debugTag string) Eff[E, B] {
+	loop := func(e Eff[E, A]) Eff[E, B] {
+		return handler(state, e)
+	}
+	return newContUnchecked(m.effect, composeRunQ(m.queue, loop, debugTag))
+}
+
 // ===================
 // :: Reader Effect ::
 // ===================
@@ -67,17 +82,13 @@ func (_ AskEffect[R]) effectResult() R { panic("marker method") }
 func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 	log.OnRunEffect("RunReader", value, e)
 
-	loop := func(e Eff[E, R]) Eff[E, R] {
-		return RunReader(value, e)
-	}
-
 	switch m := e.EffImpl.(type) {
 	case Cont[E, R]:
 		switch t := m.effect.(type) {
 		case AskEffect[R]:
 			return RunReader(value, ApplyContinuationToEffectResult(t, m.queue, value))
 		default:
-			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunReader"))
+			return ForwardEffectWithState(m, RunReader[R, E], value, "RunReader")
 		}
 	}
 	return e
@@ -143,7 +154,8 @@ func RunWriter[WL listBuilder[WL, W], W any, E Writer[E, W], T any](e Eff[E, T])
 				})
 			})
 		default:
-			return newContUnchecked(t, composeRunQ(m.queue, RunWriter[WL, W, E, T], "RunWriter"))
+			// Unknown effect type, delegate to outer handler
+			return ForwardEffect(m, RunWriter[WL, W, E, T], "RunWriter")
 		}
 	default:
 		panic("unreachable")
@@ -164,10 +176,8 @@ func RunWriterReverse[WL listBuilder[WL, W], W any, E Writer[E, W], T any](writt
 		case TellEffect[W]:
 			return RunWriterReverse[WL, W](written.Push(t.output), ApplyContinuationToEffectResult(t, m.queue, UnitValue))
 		default:
-			loop := func(e Eff[E, T]) Eff[E, WriterResult[T, WL]] {
-				return RunWriterReverse[WL, W](written, e)
-			}
-			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunWriterReverse"))
+			// Unknown effect type, delegate to outer handler
+			return ForwardEffectWithState(m, RunWriterReverse[WL, W, E, T], written, "RunWriterReverse")
 		}
 	default:
 		panic("unreachable")
@@ -234,10 +244,8 @@ func RunState[S any, E State[E, S], T any](state S, e Eff[E, T]) Eff[E, StateRes
 		case SetEffect[S]:
 			return RunState(t.newState, ApplyContinuationToEffectResult(t, m.queue, UnitValue))
 		default:
-			loop := func(e Eff[E, T]) Eff[E, StateResult[T, S]] {
-				return RunState(state, e)
-			}
-			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunState"))
+			// Unknown effect type, delegate to outer handler
+			return ForwardEffectWithState(m, RunState[S, E, T], state, "RunState")
 		}
 	default:
 		panic("unreachable")
