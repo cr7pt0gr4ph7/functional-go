@@ -32,11 +32,12 @@ func (_ YieldEffect[Y, R]) effectTag() {}
 
 // Interface type for reprsentations of effects that result in a value of type T.
 type TypedEffectTag[T any] interface {
+	EffectTag
 	effectResult() T // marker method - do not call
 }
 
-func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](effect L, continuation evalQueue[E, ValueFromEffect, B], effectResult A) Eff[E, B] {
-	return continuation.applyTo(ValueFromEffect(effectResult))
+func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](effect L, continuation evalRightNode[E, B], effectResult A) Eff[E, B] {
+	return continuation.qApply(effectResult)
 }
 
 // ===================
@@ -78,7 +79,7 @@ func RunReader[R any, E Reader[E, R]](value R, e Eff[E, R]) Eff[E, R] {
 		case AskEffect[R]:
 			return RunReader(value, ApplyContinuationToEffectResult(t, m.queue, value))
 		default:
-			return newCont(t, liftQ(qCompose(m.queue, loop)))
+			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunReader"))
 		}
 	}
 	return e
@@ -125,10 +126,9 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 			Written: list.Empty[W](),
 		})
 	case Cont[E, T]:
-		k := qCompose(m.queue, RunWriter[W, E, T])
 		switch t := m.effect.(type) {
 		case TellEffect[W]:
-			kx := k(ValueFromEffect(UnitValue))
+			kx := RunWriter[W](ApplyContinuationToEffectResult(t, m.queue, UnitValue))
 			return FlatMap(kx, func(x WriterResult[T, W]) Eff[E, WriterResult[T, W]] {
 				return newPure[E](WriterResult[T, W]{
 					Value:   x.Value,
@@ -136,7 +136,29 @@ func RunWriter[W any, E Writer[E, W], T any](e Eff[E, T]) Eff[E, WriterResult[T,
 				})
 			})
 		default:
-			return newCont(t, liftQ(k))
+			return newContUnchecked(t, composeRunQ(m.queue, RunWriter[W, E, T], "RunWriter"))
+		}
+	default:
+		panic("unreachable")
+	}
+}
+
+func RunWriterReverse[W any, E Writer[E, W], T any](l List[W], e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+	switch m := e.EffImpl.(type) {
+	case Pure[E, T]:
+		return newPure[E](WriterResult[T, W]{
+			Value:   m.value,
+			Written: l,
+		})
+	case Cont[E, T]:
+		switch t := m.effect.(type) {
+		case TellEffect[W]:
+			return RunWriterReverse[W](l.Push(t.output), ApplyContinuationToEffectResult(t, m.queue, UnitValue))
+		default:
+			loop := func(e Eff[E, T]) Eff[E, WriterResult[T, W]] {
+				return RunWriterReverse(l, e)
+			}
+			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunWriterReverse"))
 		}
 	default:
 		panic("unreachable")
@@ -206,8 +228,7 @@ func RunState[S any, E State[E, S], T any](state S, e Eff[E, T]) Eff[E, StateRes
 			loop := func(e Eff[E, T]) Eff[E, StateResult[T, S]] {
 				return RunState(state, e)
 			}
-			k := qCompose(m.queue, loop)
-			return newCont(t, liftQ(k))
+			return newContUnchecked(t, composeRunQ(m.queue, loop, "RunState"))
 		}
 	default:
 		panic("unreachable")
