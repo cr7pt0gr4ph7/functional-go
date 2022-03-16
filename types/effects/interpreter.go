@@ -1,5 +1,24 @@
 package effects
 
+func ApplyContinuationToEffectResult[L TypedEffectTag[A], E any, A any, B any](effect L, continuation evalRightNode[E, B], effectResult A) Eff[E, B] {
+	return continuation.qApply(effectResult)
+}
+
+type Handler[E any, A any, B any] func(e Eff[E, A]) Eff[E, B]
+
+type HandlerWithState[E any, S any, A any, B any] func(state S, e Eff[E, A]) Eff[E, B]
+
+func ForwardEffect[E any, A any, B any](m Cont[E, A], handler Handler[E, A, B], debugTag string) Eff[E, B] {
+	return newContUnchecked(m.effect, composeRunQ(m.queue, handler, debugTag))
+}
+
+func ForwardEffectWithState[E any, S any, A any, B any](m Cont[E, A], handler HandlerWithState[E, S, A, B], state S, debugTag string) Eff[E, B] {
+	loop := func(e Eff[E, A]) Eff[E, B] {
+		return handler(state, e)
+	}
+	return newContUnchecked(m.effect, composeRunQ(m.queue, loop, debugTag))
+}
+
 type Interpreter[E any, A any, B any] interface {
 	Name() string
 	Run(e Eff[E, A]) Eff[E, B]
