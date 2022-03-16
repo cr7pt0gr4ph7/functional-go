@@ -2,7 +2,7 @@ package effects
 
 import (
 	"fmt"
-	"github.com/cr7pt0gr4ph7/functional-go/types/list"
+	"github.com/cr7pt0gr4ph7/functional-go/collections/immutable/list"
 )
 
 type MyEffects interface {
@@ -61,19 +61,19 @@ func ExampleMyEffects2() {
 
 	fmt.Println(y0)
 
-	yr := RunPureOrFail(RunState(5, RunWriter[string](y0)))
+	yr := RunPureOrFail(RunState(5, RunWriter[list.List[string], string](y0)))
 
 	fmt.Println("State:", yr.State)
 	fmt.Println("Written:", yr.Value.Written)
 	fmt.Println("Result:", yr.Value.Value)
 
-	yr1 := RunPureOrFail(RunWriter[string](RunState(5, y0)))
+	yr1 := RunPureOrFail(RunWriter[list.List[string], string](RunState(5, y0)))
 
 	fmt.Println("State:", yr1.Value.State)
 	fmt.Println("Written:", yr1.Written)
 	fmt.Println("Result:", yr1.Value.Value)
 
-	yr2 := RunPureOrFail(RunWriterReverse[string](list.Empty[string](), RunState(5, y0)))
+	yr2 := RunPureOrFail(RunWriterReverse[list.List[string], string](list.Empty[string](), RunState(5, y0)))
 
 	fmt.Println("State:", yr2.Value.State)
 	fmt.Println("Written:", yr2.Written)
