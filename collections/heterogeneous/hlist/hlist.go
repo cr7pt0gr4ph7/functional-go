@@ -7,6 +7,7 @@ import (
 // HList can be used as a constraint for heterogeneous lists.
 type HList interface {
 	hList() // marker method
+	hExtract() (head any, tail HList, ok bool)
 	Empty() bool
 	Len() int
 	countTailRec(count int) int
@@ -22,6 +23,9 @@ type NonEmpty interface {
 func (_ Nil) hList()           {}
 func (_ Cons[_, _]) hList()    {}
 func (_ Cons[_, _]) nonEmpty() {}
+
+func (_ Nil) hExtract() (any, HList, bool)        { return nil, nil, false }
+func (c Cons[H, T]) hExtract() (any, HList, bool) { return c.Head, c.Tail, true }
 
 // Nil represents the empty list.
 type Nil struct{}
