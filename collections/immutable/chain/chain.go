@@ -1,4 +1,8 @@
-package immutable
+package chain
+
+import (
+	"github.com/cr7pt0gr4ph7/functional-go/collections/immutable/cursor"
+)
 
 // Immutable list with O(1) prepend, append and concat.
 type Chain[T any] struct {
@@ -47,7 +51,7 @@ func (c Chain[T]) Len() int {
 	return i
 }
 
-func (c Chain[T]) Cursor() Cursor[T] {
+func (c Chain[T]) Cursor() cursor.Cursor[T] {
 	return chainCursor[T]{c.impl}
 }
 
@@ -67,33 +71,24 @@ type concat[T any] struct {
 	right chainImpl[T]
 }
 
-type fromSlice[T any] struct {
-	slice []T
-}
-
-type fromCursor[T any] struct {
-	cursor Cursor[T]
-}
-
 type chainCursor[T any] struct {
 	impl chainImpl[T]
 }
 
-func (c chainCursor[T]) Advance() (T, Cursor[T], bool) {
+func (c chainCursor[T]) Advance() (T, cursor.Cursor[T], bool) {
 	switch i := c.impl.(type) {
 	case nil:
 		var t T
 		return t, c, false
 	case one[T]:
-		return i.item, emptyCursor[T]{}, true
+		return i.item, cursor.Empty[T](), true
 	case concat[T]:
-		return chainedCursor[T]{chainCursor[T]{i.left}, chainCursor[T]{i.right}}.Advance()
+		return cursor.Concat[T](i.left.Cursor(), i.right.Cursor()).Advance()
 	case fromSlice[T]:
-		return sliceCursor[T]{i.slice}.Advance()
+		return cursor.FromSlice(i.slice).Advance()
 	case fromCursor[T]:
 		return i.cursor.Advance()
 	default:
-		fmt.Println(reflect.TypeOf(i))
 		panic("unreachable")
 	}
 }
